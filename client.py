@@ -45,6 +45,10 @@ def to_url(url, params={}):
     return urlparse.urlunparse(url)
 
 
+#
+#   Start OAuth phase
+#
+
 
 def step1_get_request_token(consumer):
     # Step 1: Get a request token. This is a temporary token that is used for 
@@ -116,14 +120,54 @@ def step3_get_access_token(consumer, request_token, oauth_verifier):
 
     return access_token
 
+#
+#   End of OAuth phase
+#
+#access_token = oauth.Token(access_token_dict['oauth_token'], access_token_dict['oauth_token_secret'])
 
-def request(consumer, access_token, url):
-    # Request resource
+
+def _request(consumer, access_token, url, method='GET', headers=None, body=None):
+    client = oauth.Client(consumer, access_token)
+    params = {
+        'oauth_version': '2.0',
+    }
+    resp, content = client.request(to_url(url, params), method)
+    if resp['status'] != '200':
+        raise Exception("Invalid response %s." % resp['status'])
+    return resp, content
+
+def get(consumer, access_token, url):
+    ''' GET request resource '''
     client = oauth.Client(consumer, access_token)
     params = {
         'oauth_version': '2.0',
     }
     resp, content = client.request(to_url(url, params), "GET")
+    if resp['status'] != '200':
+        raise Exception("Invalid response %s." % resp['status'])
+    print "Response Status Code: %s" % resp['status']
+    print "Response body: %s" % content
+
+    return content
+
+
+def post(consumer, access_token, url):
+    ''' POST resource '''
+    from datetime import datetime
+    now = datetime.now()
+    url = 'http://ecogwiki-jangxyz.appspot.com/ecogwiki/client/sandbox/%s?_type=json' % now.strftime("%Y%m%d-%H%M")
+    client = oauth.Client(consumer, access_token)
+    params = {
+        'oauth_version': '2.0',
+    }
+
+    new_data = {
+        'body': 'new body at [[%s]]' % now.strftime("%Y%m%d-%H%M"),
+        'revision': 0,
+        'comment': '- by ecogwiki client'
+    }
+    resp, content = client.request(to_url(url, params), "POST", 
+        body=urllib.urlencode(new_data))
     if resp['status'] != '200':
         raise Exception("Invalid response %s." % resp['status'])
     print "Response Status Code: %s" % resp['status']
@@ -141,7 +185,7 @@ if __name__ == '__main__':
     access_token   = step3_get_access_token(consumer, request_token, oauth_verifier)
 
     # request resource
-    content = request(consumer, access_token, url)
+    content = get(consumer, access_token, url)
 
     print content
 
