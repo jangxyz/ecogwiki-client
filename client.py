@@ -3,6 +3,8 @@ import json
 import urlparse, urllib
 import oauth2 as oauth
 
+CWD = os.path.dirname(os.path.realpath(__file__))
+
 app_id = 'ecogwiki-jangxyz'
 url = 'http://ecogwiki-jangxyz.appspot.com/ecogwiki/client/example-1?_type=json'
 url = 'http://ecogwiki-jangxyz.appspot.com/ecogwiki/client/example-2?_type=json'
@@ -280,9 +282,13 @@ class EcogWiki(object):
 
 if __name__ == '__main__':
     # auth
-    request_token  = step1_get_request_token(consumer)
-    oauth_verifier = step2_user_authorization(request_token)
-    access_token   = step3_get_access_token(consumer, request_token, oauth_verifier)
+    if os.path.exists(os.path.join(CWD, '.auth')):
+        token, secret = open(os.path.join(CWD, '.auth')).read().strip().split('\n')
+        access_token  = oauth.Token(token, secret)
+    else:
+        request_token  = step1_get_request_token(consumer)
+        oauth_verifier = step2_user_authorization(request_token)
+        access_token   = step3_get_access_token(consumer, request_token, oauth_verifier)
 
     # request resource
     content = get(consumer, access_token, url)
