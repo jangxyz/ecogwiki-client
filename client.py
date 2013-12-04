@@ -1,7 +1,13 @@
 import os
+import sys
+import time
+import datetime
 import json
+import pprint
 import urlparse, urllib
 import oauth2 as oauth
+
+import feedparser
 
 CWD = os.path.dirname(os.path.realpath(__file__))
 
@@ -211,44 +217,46 @@ class EcogWiki(object):
             raise Exception("Invalid response %s." % resp['status'])
         return resp, content
 
-    def _highlight(self, text, format='markdown'):
-        import pprint
+    @staticmethod
+    def _highlight(text, format='markdown'):
         return pprint.pformat(text)
         #from pygments import highlight
         #from pygments.formatters import Terminal256Formatter
         #from pygments.lexers import get_lexer_by_name
 
+    @staticmethod
+    def _parse_feed(text):
+        return feedparser.parse(text)
+
     def list(self):
         ''' shorthand for GET /sp.index?_type=atom '''
         url = urllib.basejoin(self.url, 'sp.index')
         resp, content = self._request(url, format='atom')
-        print self._highlight(content)
+        return self._parse_feed(content)
 
     def all(self):
         ''' shorthand for GET /sp.titles?_type=json '''
         url = urllib.basejoin(self.url, 'sp.titles')
         resp, content = self._request(url, format='json')
-        print self._highlight(json.loads(content))
+        return json.loads(content)
 
     def recent(self):
         ''' shorthand for GET /sp.changes?_type=atom '''
         url = urllib.basejoin(self.url, 'sp.changes')
         resp, content = self._request(url, format='atom')
-        print self._highlight(content)
+        return self._parse_feed(content)
 
     def get(self, title, format='json'):
         url = urllib.basejoin(self.url, title)
         resp, content = self._request(url, format=format)
         if format == 'json':
             content = json.loads(content)
-        print self._highlight(content)
         return content
 
     def cat(self, title):
         ''' shorthand for GET TITLE?_type=rawbody '''
         url = urllib.basejoin(self.url, title)
         resp, content = self._request(url, format='rawbody')
-        print content
         return content
 
     def post(self, title, body, revision=None, comment=''):
@@ -269,15 +277,15 @@ class EcogWiki(object):
     def edit(self, title):
         pass
     
-    def search(self, title):
-        pass
+    #def search(self, title):
+    #    pass
 
-    def memo(self):
-        pass
+    #def memo(self):
+    #    pass
 
-    def render(self, body, open=False):
-        ''' render markdown text into HTML '''
-        pass
+    #def render(self, body, open=False):
+    #    ''' render markdown text into HTML '''
+    #    pass
 
 
 if __name__ == '__main__':
@@ -291,8 +299,49 @@ if __name__ == '__main__':
         access_token   = step3_get_access_token(consumer, request_token, oauth_verifier)
 
     # request resource
-    content = get(consumer, access_token, url)
+    #content = get(consumer, access_token, url)
+    #print content
 
-    print content
+    now = datetime.datetime.now()
+    ecog = EcogWiki('http://ecogwiki-jangxyz.appspot.com', access_token)
 
+    ## list
+    #_list = ecog.list()
+    #for entry in _list.entries:
+    #    dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
+    #    if now - dt <= datetime.timedelta(days=180):
+    #        updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
+    #    else:
+    #        updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
+
+    #    print "%s %s %s" % (entry.author, updated_time, entry.title)
+    #print
+
+    ## title
+    #for title in ecog.all():
+    #    print title
+
+    ## recents
+    #recents = ecog.recent()
+    #for entry in recents.entries:
+    #    dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
+    #    if now - dt <= datetime.timedelta(days=180):
+    #        updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
+    #    else:
+    #        updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
+
+    #    size = len(entry.summary)
+    #    print "%s %d %s %s" % (entry.author, size, updated_time, entry.title)
+    #print
+
+    ## get
+    #content = ecog.get(title=sys.argv[1])
+    #pprint.pprint(content)
+
+    # cat
+    content = ecog.cat(title=sys.argv[1])
+    print(content)
+
+    # edit
+    #
 
