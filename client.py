@@ -198,7 +198,7 @@ def post(consumer, access_token, url):
 
 class EcogWiki(object):
     def __init__(self, url, access_token=None):
-        self.url = url # 'http://ecogwiki-jangxyz.appspot.com'
+        self.url = url # http://ecogwiki-jangxyz.appspot.com
         self.set_access_token(access_token)
 
     def auth(self):
@@ -298,6 +298,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
                        help='auth file storing access token')
+    parser.add_argument('--host', metavar='HOST', dest='ecoghost', default='www.ecogwiki.com',
+                       help='ecogwiki server host')
 
     subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', help='ecogwiki commands')
     cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
@@ -325,12 +327,12 @@ if __name__ == '__main__':
         oauth_verifier = step2_user_authorization(request_token)
         access_token   = step3_get_access_token(consumer, request_token, oauth_verifier)
 
-    # request resource
-    #content = get(consumer, access_token, url)
-    #print content
+    #ecog = EcogWiki('http://ecogwiki-jangxyz.appspot.com', access_token)
 
-    now = datetime.datetime.now()
-    ecog = EcogWiki('http://ecogwiki-jangxyz.appspot.com', access_token)
+    if '://' not in args.ecoghost:
+        args.ecoghost = 'http://' + args.ecoghost
+    ecog = EcogWiki(args.ecoghost, access_token)
+    now  = datetime.datetime.now()
 
     # list
     if args.command == 'list':
