@@ -6,12 +6,11 @@ import json
 import argparse
 import collections
 import tempfile
-import pprint
 import httplib
 import urlparse
 import urllib
-from urllib2 import HTTPError
 import subprocess
+from urllib2 import HTTPError
 
 import oauth2 as oauth
 import feedparser
@@ -22,9 +21,9 @@ app_id = 'ecogwiki-jangxyz'
 url = 'http://ecogwiki-jangxyz.appspot.com/ecogwiki/client/example-1?_type=json'
 url = 'http://ecogwiki-jangxyz.appspot.com/ecogwiki/client/example-2?_type=json'
 
-REQUEST_TOKEN_URL = "https://%s.appspot.com/_ah/OAuthGetRequestToken" % app_id
-AUTHORIZE_URL     = "https://%s.appspot.com/_ah/OAuthAuthorizeToken"  % app_id
-ACCESS_TOKEN_URL  = "https://%s.appspot.com/_ah/OAuthGetAccessToken"  % app_id
+REQUEST_TOKEN_URL = lambda host: "https://%s/_ah/OAuthGetRequestToken" % host
+AUTHORIZE_URL     = lambda host: "https://%s/_ah/OAuthAuthorizeToken"  % host
+ACCESS_TOKEN_URL  = lambda host: "https://%s/_ah/OAuthGetAccessToken"  % host
 
 client_id     = '576416393937-rmcaesbkv0rfdcq71l5ol9p3sbmv1qf9.apps.googleusercontent.com'
 client_secret = 'f_7_soOcc_SZhlDzLfUB0d-t'
@@ -70,8 +69,7 @@ def to_url(url, params={}):
 #   Start OAuth phase
 #
 
-
-def step1_get_request_token(consumer):
+def step1_get_request_token(consumer, host):
     # Step 1: Get a request token. This is a temporary token that is used for 
     # having the user authorize an access token and to sign the request to obtain 
     # said access token.
@@ -80,11 +78,11 @@ def step1_get_request_token(consumer):
         'oauth_version': '2.0',
         'oauth_callback': 'oob',
     }
-    url = to_url(REQUEST_TOKEN_URL, params)
+    url = to_url(REQUEST_TOKEN_URL(urlparse.urlparse(host).hostname), params)
     resp, content = client.request(url, "GET")
     if resp['status'] != '200':
-        status = resp['status']
-        msg    = httplib.responses.get(int(status), "Invalid response %s." % status)
+        status = int(resp['status'])
+        msg    = httplib.responses.get(status, "Invalid response %d." % status)
         raise HTTPError(url, status, msg, None, None)
 
     request_token_dict = dict(urlparse.parse_qsl(content))
@@ -97,14 +95,9 @@ def step1_get_request_token(consumer):
 
     return request_token
 
-
-
-def step2_user_authorization(request_token):
-    # Step2
-    #
-    #
+def step2_user_authorization(request_token, host):
     print "Go to the following link in your browser:"
-    print "%s?oauth_token=%s" % (AUTHORIZE_URL, request_token.key)
+    print "%s?oauth_token=%s" % (AUTHORIZE_URL(urlparse.urlparse(host).hostname), request_token.key)
     print 
 
     # After the user has granted access to you, the consumer, the provider will
@@ -118,7 +111,7 @@ def step2_user_authorization(request_token):
 
     return oauth_verifier
 
-def step3_get_access_token(consumer, request_token, oauth_verifier):
+def step3_get_access_token(consumer, request_token, oauth_verifier, host):
     # Step 3: Once the consumer has redirected the user back to the oauth_callback
     # URL you can request the access token the user has approved. You use the 
     # request token to sign this request. After this is done you throw away the
@@ -130,7 +123,12 @@ def step3_get_access_token(consumer, request_token, oauth_verifier):
     params = {
         'oauth_version': '2.0',
     }
-    resp, content = client.request(to_url(ACCESS_TOKEN_URL, params), "POST")
+    url = to_url(ACCESS_TOKEN_URL(urlparse.urlparse(host).hostname), params)
+    resp, content = client.request(url, "POST")
+    if resp['status'] != '200':
+        status = int(resp['status'])
+        msg    = httplib.responses.get(status, "Invalid response %d." % status)
+        raise HTTPError(url, status, msg, None, None)
 
     access_token_dict = dict(urlparse.parse_qsl(content))
     access_token      = oauth.Token(access_token_dict['oauth_token'], access_token_dict['oauth_token_secret'])
@@ -158,8 +156,8 @@ def _request(consumer, access_token, url, method='GET', headers=None, body=None)
     url = to_url(url, params)
     resp, content = client.request(url, method)
     if resp['status'] != '200':
-        status = resp['status']
-        msg    = httplib.responses.get(int(status), "Invalid response %s." % status)
+        status = int(resp['status'])
+        msg    = httplib.responses.get(status, "Invalid response %d." % status)
         raise HTTPError(url, status, msg, None, None)
     return resp, content
 
@@ -172,8 +170,8 @@ def get(consumer, access_token, url):
     url = to_url(url, params)
     resp, content = client.request(url, "GET")
     if resp['status'] != '200':
-        status = resp['status']
-        msg    = httplib.responses.get(int(status), "Invalid response %s." % status)
+        status = int(resp['status'])
+        msg    = httplib.responses.get(status, "Invalid response %d." % status)
         raise HTTPError(url, status, msg, None, None)
     print "Response Status Code: %s" % resp['status']
     print "Response body: %s" % content
@@ -183,8 +181,7 @@ def get(consumer, access_token, url):
 
 def post(consumer, access_token, url):
     ''' POST resource '''
-    from datetime import datetime
-    now = datetime.now()
+    now = datetime.datetime.now()
     url = 'http://ecogwiki-jangxyz.appspot.com/ecogwiki/client/sandbox/%s?_type=json' % now.strftime("%Y%m%d-%H%M")
     client = oauth.Client(consumer, access_token)
     params = {
@@ -200,8 +197,8 @@ def post(consumer, access_token, url):
     resp, content = client.request(url, "POST", 
         body=urllib.urlencode(new_data))
     if resp['status'] != '200':
-        status = resp['status']
-        msg    = httplib.responses.get(int(status), "Invalid response %s." % status)
+        status = int(resp['status'])
+        msg    = httplib.responses.get(status, "Invalid response %d." % status)
         raise HTTPError(url, status, msg, None, None)
     print "Response Status Code: %s" % resp['status']
     print "Response body: %s" % content
@@ -239,8 +236,8 @@ class EcogWiki(object):
         url = to_url(url, params)
         resp, content = self.client.request(url, method, body=body)
         if resp['status'] != '200':
-            status = resp['status']
-            msg    = httplib.responses.get(int(status), "Invalid response %s." % status)
+            status = int(resp['status'])
+            msg    = httplib.responses.get(status, "Invalid response %d." % status)
             raise HTTPError(url, status, msg, None, None)
         return resp, content
 
@@ -289,7 +286,7 @@ class EcogWiki(object):
         ''' shorthand for GET TITLE?_type=rawbody '''
         return self.get(title, format='rawbody', revision=revision)
 
-    def edit(self, title):
+    def edit(self, title, r0_template=None):
         ''' open editor and send post after save 
 
         1. get page metadata and save
@@ -300,58 +297,67 @@ class EcogWiki(object):
         6. post page with new content
         7. remove temp files
         '''
+        if r0_template and not r0_template.endswith("\n"):
+            r0_template += "\n\n"
 
         tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
         print tempdir
-        # 1. get page metadata
-        jsondata = self.get(title, format='json')
-
-        safe_title = urllib.quote_plus(title)
-        fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
-        print 'json:', temp_json
-        with open(temp_json, 'w') as f:
-            json.dump(jsondata, f, indent=4)
-        # 2. get page rawdata
-        revision = jsondata['revision']
-        rawbody = self.get(title, format='rawbody', revision=revision)
-        fd, temp_rawbody = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
-        print 'rawbody:', temp_rawbody
-        with open(temp_rawbody, 'w') as f:
-            f.write(rawbody)
-        # 3. open temp file with editor
-        ret = subprocess.call([editor, temp_rawbody])
-        if ret != 0:
-            print 'editor %s failed with status %d, aborting.' % (editor, ret)
-            return
-        # 4. confirm content
-        content = ''
-        with open(temp_rawbody) as f:
-            content = f.read()
-        if len(content) == 0:
-            print 'empty content, aborting.'
-            return
-        # 5. ask comment
-        comment = raw_input('comment (default: written by ecogwiki client): ')
-        comment = comment or 'post by ecogwiki client'
-        # 6. post page with new content
-        result = self.post(title, content, revision=revision, comment=comment)
-        print result
-        # 7. remove temp files
         try:
-            os.remove(temp_rawbody)
-        except OSError as e:
-            print e
-            pass
-        try:
-            os.remove(temp_json)
-        except OSError as e:
-            print e
-            pass
-        try:
-            os.removedirs(tempdir)
-        except OSError as e:
-            print e
-            pass
+            # 1. get page metadata
+            jsondata   = self.get(title, format='json')
+            safe_title = urllib.quote_plus(title)
+            fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
+            print 'json:', temp_json
+            try:
+                with open(temp_json, 'w') as f:
+                    json.dump(jsondata, f, indent=4)
+                # 2. get page rawdata
+                revision = jsondata['revision']
+                rawbody  = self.get(title, format='rawbody', revision=revision)
+                fd, temp_rawbody = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
+                print 'rawbody:', temp_rawbody
+                try:
+                    with open(temp_rawbody, 'w') as f:
+                        if revision > 0:
+                            f.write(rawbody)
+                        else:
+                            f.write(r0_template)
+                    # 3. open temp file with editor
+                    ret = subprocess.call([editor, temp_rawbody])
+                    if ret != 0:
+                        print 'editor %s failed with status %d, aborting.' % (editor, ret)
+                        return
+                    # 4. confirm content
+                    content = ''
+                    with open(temp_rawbody) as f:
+                        content = f.read()
+                    if (revision > 0 and content == rawbody) or (revision == 0 and content == r0_template):
+                        print 'nothing new, aborting.'
+                        return
+                    if len(content) == 0:
+                        print 'empty content, aborting.'
+                        return
+                    # 5. ask comment
+                    comment = raw_input('comment (default: written by ecogwiki client): ')
+                    comment = comment or 'post by ecogwiki client'
+                    # 6. post page with new content
+                    result = self.post(title, content, revision=revision, comment=comment)
+                    print result
+                finally:
+                    try:
+                        os.remove(temp_rawbody)
+                    except OSError as e:
+                        print e
+            finally:
+                try:
+                    os.remove(temp_json)
+                except OSError as e:
+                    print e
+        finally:
+            try:
+                os.removedirs(tempdir)
+            except OSError as e:
+                print e
     
     #def search(self, title):
     #    pass
@@ -382,14 +388,18 @@ if __name__ == '__main__':
     title_parser  = subparsers.add_parser('title',  help='list all titles')
     recent_parser = subparsers.add_parser('recent', help='list recent modified pages')
     edit_parser   = subparsers.add_parser('edit',   help='edit page with editor')
+    memo_parser   = subparsers.add_parser('memo',   help='quick memo')
     
     edit_parser.add_argument('title', metavar='TITLE', help='page title')
+    edit_parser.add_argument('--template', metavar='TEXT', help='text on new file', default=None)
     get_parser.add_argument('title', metavar='TITLE', help='page title')
     cat_parser.add_argument('title', metavar='TITLE', help='page title')
     get_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
     cat_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
 
     args = parser.parse_args()
+    if '://' not in args.ecoghost:
+        args.ecoghost = 'http://' + args.ecoghost
 
     # auth
     if not args.authfile.startswith('/'):
@@ -400,22 +410,24 @@ if __name__ == '__main__':
         access_token  = oauth.Token(token, secret)
     else:
         # OAuth authorization
-        request_token  = step1_get_request_token(consumer)
-        oauth_verifier = step2_user_authorization(request_token)
-        access_token   = step3_get_access_token(consumer, request_token, oauth_verifier)
+        request_token  = step1_get_request_token(consumer, args.ecoghost)
+        oauth_verifier = step2_user_authorization(request_token, args.ecoghost)
+        access_token   = step3_get_access_token(consumer, request_token, oauth_verifier, args.ecoghost)
         # save to auth file
         accepted = 'n'
         while accepted.lower() == 'n':
             accepted = raw_input('Do you want to save access token for later? (Y/n) ')
         with open(args.authfile, 'w') as f:
             f.write(access_token.key + '\n')
-            f.write(access_token.secret)
+            f.write(access_token.secret + '\n')
 
     # EcoWiki
-    if '://' not in args.ecoghost:
-        args.ecoghost = 'http://' + args.ecoghost
     ecog = EcogWiki(args.ecoghost, access_token)
     now  = datetime.datetime.now()
+
+    #
+    # Commands
+    #
 
     # list
     if args.command == 'list':
@@ -459,6 +471,7 @@ if __name__ == '__main__':
             # sort by specific key order
             key_order = ["title", "revision", "updated_at", "modifier", "acl_read", "acl_write", "data", "body"]
             content = collections.OrderedDict(sorted(content.items(), key=lambda (k,v): key_order.index(k)))
+            # trim body
             if content['body'] > 62: # 79 - 4(indent) - 6("body") - 2(: ) - 2("") - 3(...)
                 content['body'] = content['body'][:62] + '...'
 
@@ -469,11 +482,27 @@ if __name__ == '__main__':
 
     # cat
     elif args.command == 'cat':
-        content = ecog.cat(title=args.title, revision=args.revision)
-        print(content)
+        try:
+            content = ecog.cat(title=args.title, revision=args.revision)
+            print(content)
+        except HTTPError as e:
+            print e.code, e.msg
+            sys.exit(e.code)
 
     # edit
     elif args.command == 'edit':
-        content = ecog.edit(title=args.title)
+        try:
+            ecog.edit(title=args.title, r0_template=args.template)
+        except HTTPError as e:
+            print e.code, e.msg
+            sys.exit(e.code)
 
+    # memo
+    elif args.command == 'memo':
+        try:
+            title = 'memo/%s' % now.strftime("%Y-%m-%d")
+            ecog.edit(title=title, r0_template='.write janghwan@gmail.com\n')
+        except HTTPError as e:
+            print e.code, e.msg
+            sys.exit(e.code)
 
