@@ -3,6 +3,7 @@ import sys
 import time
 import datetime
 import json
+import argparse
 import pprint
 import urlparse, urllib
 import oauth2 as oauth
@@ -289,8 +290,38 @@ class EcogWiki(object):
 
 
 if __name__ == '__main__':
+    #
+    # args
+    #
+    parser = argparse.ArgumentParser(description='Ecogwiki client', epilog='Information in your fingertips.')
+
+    subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', help='ecogwiki commands')
+    cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
+    edit_parser   = subparsers.add_parser('edit',   help='edit page with editor')
+    list_parser   = subparsers.add_parser('list',   help="list pages info")
+    title_parser  = subparsers.add_parser('title',  help='list all titles')
+    recent_parser = subparsers.add_parser('recent', help='list recent modified pages')
+    
+    #parser.add_argument('integers', metavar='N', type=int, nargs='+',
+    #                   help='an integer for the accumulator')
+    parser.add_argument('--sum', dest='accumulate', action='store_const',
+                       const=sum, default=max,
+                       help='sum the integers (default: find the max)')
+    parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
+                       help='auth file storing access token')
+
+    # cat
+    cat_parser.add_argument('title', metavar='TITLE')
+
+    #parser.print_help()
+    args = parser.parse_args()
+    #print args.accumulate(args.integers)
+    #import pdb; pdb.set_trace()
+
     # auth
-    if os.path.exists(os.path.join(CWD, '.auth')):
+    if not args.authfile.startswith('/'):
+        args.authfile = os.path.join(CWD, args.authfile)
+    if os.path.exists(args.authfile):
         token, secret = open(os.path.join(CWD, '.auth')).read().strip().split('\n')
         access_token  = oauth.Token(token, secret)
     else:
@@ -339,8 +370,9 @@ if __name__ == '__main__':
     #pprint.pprint(content)
 
     # cat
-    content = ecog.cat(title=sys.argv[1])
-    print(content)
+    if args.command == 'cat':
+        content = ecog.cat(title=args.title)
+        print(content)
 
     # edit
     #
