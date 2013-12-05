@@ -4,6 +4,7 @@ import time
 import datetime
 import json
 import argparse
+import collections
 import pprint
 import urlparse, urllib
 import oauth2 as oauth
@@ -295,28 +296,23 @@ if __name__ == '__main__':
     #
     parser = argparse.ArgumentParser(description='Ecogwiki client', epilog='Information in your fingertips.')
 
-    subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', help='ecogwiki commands')
-    cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
-    edit_parser   = subparsers.add_parser('edit',   help='edit page with editor')
-    list_parser   = subparsers.add_parser('list',   help="list pages info")
-    title_parser  = subparsers.add_parser('title',  help='list all titles')
-    recent_parser = subparsers.add_parser('recent', help='list recent modified pages')
-    
-    #parser.add_argument('integers', metavar='N', type=int, nargs='+',
-    #                   help='an integer for the accumulator')
-    parser.add_argument('--sum', dest='accumulate', action='store_const',
-                       const=sum, default=max,
-                       help='sum the integers (default: find the max)')
     parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
                        help='auth file storing access token')
 
+    subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', help='ecogwiki commands')
+    cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
+    get_parser    = subparsers.add_parser('get',    help='print page in json')
+    list_parser   = subparsers.add_parser('list',   help="list pages info")
+    title_parser  = subparsers.add_parser('title',  help='list all titles')
+    recent_parser = subparsers.add_parser('recent', help='list recent modified pages')
+    edit_parser   = subparsers.add_parser('edit',   help='edit page with editor')
+    
     # cat
-    cat_parser.add_argument('title', metavar='TITLE')
+    cat_parser.add_argument('title', metavar='TITLE', help='page title')
+    # get
+    get_parser.add_argument('title', metavar='TITLE', help='page title')
 
-    #parser.print_help()
     args = parser.parse_args()
-    #print args.accumulate(args.integers)
-    #import pdb; pdb.set_trace()
 
     # auth
     if not args.authfile.startswith('/'):
@@ -336,41 +332,54 @@ if __name__ == '__main__':
     now = datetime.datetime.now()
     ecog = EcogWiki('http://ecogwiki-jangxyz.appspot.com', access_token)
 
-    ## list
-    #_list = ecog.list()
-    #for entry in _list.entries:
-    #    dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
-    #    if now - dt <= datetime.timedelta(days=180):
-    #        updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
-    #    else:
-    #        updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
+    # list
+    if args.command == 'list':
+        for entry in ecog.list().entries:
+            dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
+            if now - dt <= datetime.timedelta(days=180):
+                updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
+            else:
+                updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
 
-    #    print "%s %s %s" % (entry.author, updated_time, entry.title)
-    #print
+            print "%s %s %s" % (entry.author, updated_time, entry.title)
+        print
 
-    ## title
-    #for title in ecog.all():
-    #    print title
+    # title
+    elif args.command == 'title':
+        for title in ecog.all():
+            print title
 
-    ## recents
-    #recents = ecog.recent()
-    #for entry in recents.entries:
-    #    dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
-    #    if now - dt <= datetime.timedelta(days=180):
-    #        updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
-    #    else:
-    #        updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
+    # recents
+    elif args.command == 'recent':
+        for entry in ecog.recent().entries:
+            dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
+            if now - dt <= datetime.timedelta(days=180):
+                updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
+            else:
+                updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
 
-    #    size = len(entry.summary)
-    #    print "%s %d %s %s" % (entry.author, size, updated_time, entry.title)
-    #print
+            size = 0
+            try:
+                size = len(entry.summary)
+            except:
+                pass
+            print "%s %d %s %s" % (entry.author, size, updated_time, entry.title)
+        print
 
-    ## get
-    #content = ecog.get(title=sys.argv[1])
-    #pprint.pprint(content)
+    # get
+    elif args.command == 'get':
+        content = ecog.get(title=args.title)
+
+        # sort by specific key order
+        key_order = ["title", "revision", "updated_at", "modifier", "acl_read", "acl_write", "data", "body"]
+        content = collections.OrderedDict(sorted(content.items(), key=lambda (k,v): key_order.index(k)))
+        if content['body'] > 62: # 79 - 4(indent) - 6("body") - 2(: ) - 2("") - 3(...)
+            content['body'] = content['body'][:62] + '...'
+
+        print json.dumps(content, indent=4, sort_keys=False)
 
     # cat
-    if args.command == 'cat':
+    elif args.command == 'cat':
         content = ecog.cat(title=args.title)
         print(content)
 
