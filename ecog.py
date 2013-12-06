@@ -447,7 +447,8 @@ if __name__ == '__main__':
     
     edit_parser.add_argument('title', metavar='TITLE', help='page title')
     edit_parser.add_argument('--template', metavar='TEXT', help='text on new file', default=None)
-    edit_parser.add_argument('--comment', metavar='TEXT', help='text on new file', default=None)
+    edit_parser.add_argument('--comment',  metavar='TEXT', help='text on new file', default=None)
+    memo_parser.add_argument('--comment',  metavar='TEXT', help='text on new file', default=None)
     get_parser.add_argument('title', metavar='TITLE', help='page title')
     cat_parser.add_argument('title', metavar='TITLE', help='page title')
     get_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
@@ -487,28 +488,30 @@ if __name__ == '__main__':
             print('very well...')
         return access_token
 
-    def trying_auth_on_forbidden(command, *args, **kwargs):
-        try:
-            command(*args, **kwargs)
-        except HTTPError as e:
-            if e.code == 403 and ecog.access_token is None:
-                # authorize
-                yn = raw_input('access is restricted. Do you want to authorize? (Y/n) ')
-                if yn.lower() == 'y':
-                    access_token = require_authorization(consumer, ecog.baseurl)
-                    ecog.set_access_token(access_token)
-                    # retry
-                    try:
-                        command(*args, **kwargs)
-                    except HTTPError as e:
+    def try_auth_on_forbidden(command):
+        def run(*args, **kwargs):
+            try:
+                command(*args, **kwargs)
+            except HTTPError as e:
+                if e.code == 403 and ecog.access_token is None:
+                    # authorize
+                    yn = raw_input('access is restricted. Do you want to authorize? (Y/n) ')
+                    if yn.lower() == 'y':
+                        access_token = require_authorization(consumer, ecog.baseurl)
+                        ecog.set_access_token(access_token)
+                        # retry
+                        try:
+                            command(*args, **kwargs)
+                        except HTTPError as e:
+                            print(e.code, e.msg)
+                            sys.exit(e.code)
+                    else:
                         print(e.code, e.msg)
                         sys.exit(e.code)
                 else:
                     print(e.code, e.msg)
                     sys.exit(e.code)
-            else:
-                print(e.code, e.msg)
-                sys.exit(e.code)
+        return run
 
     def updated_datetime(entry):
         timestamp = int(time.strftime("%s", entry.updated_parsed))
@@ -565,8 +568,9 @@ if __name__ == '__main__':
 
     # get
     elif args.command == 'get':
+        @try_auth_on_forbidden
         def get_command(title, revision):
-            content = ecog.get(title=args.title, revision=args.revision)
+            content = ecog.get(title=title, revision=revision)
 
             # sort by specific key order
             key_order = ["title", "revision", "updated_at", "modifier", "acl_read", "acl_write", "data", "body"]
@@ -578,27 +582,32 @@ if __name__ == '__main__':
 
             print(json.dumps(content, indent=4))
 
-        trying_auth_on_forbidden(get_command, title=args.title, revision=args.revision)
+        get_command(title=args.title, revision=args.revision)
 
     # cat
     elif args.command == 'cat':
+        @try_auth_on_forbidden
         def cat_command(title, revision):
             content = ecog.cat(title=title, revision=revision)
             print(content)
 
-        trying_auth_on_forbidden(cat_command, title=args.title, revision=args.revision)
+        cat_command(title=args.title, revision=args.revision)
 
     # edit
     elif args.command == 'edit':
-        #ecog.edit(title=args.title, r0_template=args.template, comment=args.comment)
-        trying_auth_on_forbidden(ecog.edit, 
-            title=args.title, r0_template=args.template, comment=args.comment)
+        @try_auth_on_forbidden
+        def edit_command(title, r0_template, comment):
+            ecog.edit(title=title, r0_template=r0_template, comment=comment)
+
+        edit_command(title=args.title, r0_template=args.template, comment=args.comment)
 
     # memo
     elif args.command == 'memo':
-        #ecog.edit(title='memo/%s' % now.strftime("%y-%m-%d"), r0_template='.write janghwan@gmail.com\n')
-        trying_auth_on_forbidden(ecog.edit, 
-            title='memo/%s' % now.strftime("%y-%m-%d"), 
-            r0_template=args.template, comment=args.comment)
+        @try_auth_on_forbidden
+        def memo_command(comment):
+            title = 'memo/%s' % now.strftime("%y-%m-%d")
+            ecog.edit(title=title, r0_template='.write janghwan@gmail.com\n', comment=comment)
+
+        memo_command(comment=args.comment)
 
 
