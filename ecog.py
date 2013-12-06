@@ -120,9 +120,9 @@ def step2_user_authorization(request_token, host):
         host = "https://%s" % urlparse.urlparse(host).hostname
     authorize_url = "%s/_ah/OAuthAuthorizeToken" % host.rstrip('/')
 
-    print "Go to the following link in your browser:"
-    print "%s?oauth_token=%s" % (authorize_url, request_token.key)
-    print 
+    print("Go to the following link in your browser:")
+    print("%s?oauth_token=%s" % (authorize_url, request_token.key))
+    print('')
 
     # After the user has granted access to you, the consumer, the provider will
     # redirect you to whatever URL you have told them to redirect to. You can 
@@ -132,6 +132,7 @@ def step2_user_authorization(request_token, host):
         accepted = raw_input('Have you authorized me? (y/N) ')
 
     oauth_verifier = raw_input('What is the PIN? ')
+    print('')
 
     return oauth_verifier
 
@@ -162,10 +163,22 @@ def step3_get_access_token(consumer, request_token, oauth_verifier, host):
     access_token      = oauth.Token(access_token_dict['oauth_token'], access_token_dict['oauth_token_secret'])
 
     logger.info("Access Token: (%s, %s)", access_token.key, access_token.secret)
-    print "You may now access protected resources using the access tokens above." 
 
     return access_token
 
+
+def oauth_dance(consumer, host):
+    logger.debug("let the dance begin!")
+    request_token  = step1_get_request_token(consumer, host)
+    oauth_verifier = step2_user_authorization(request_token, host)
+    access_token   = step3_get_access_token(consumer, request_token, oauth_verifier, host)
+    logger.debug("dance time is over.")
+    return access_token
+
+def save_authfile(access_token, authfile):
+    with open(authfile, 'w') as f:
+        f.write(access_token.key + '\n')
+        f.write(access_token.secret + '\n')
 #
 #   End of OAuth phase
 #
@@ -242,16 +255,13 @@ class EcogWiki(object):
         self.baseurl = baseurl # http://ecogwiki-jangxyz.appspot.com
         self.set_access_token(access_token)
 
-    def auth(self):
-        pass
+    @staticmethod
+    def _parse_feed(text):
+        return feedparser.parse(text)
 
     def set_access_token(self, access_token):
         self.access_token = access_token
         self.client = oauth.Client(consumer, access_token)
-
-    @staticmethod
-    def _parse_feed(text):
-        return feedparser.parse(text)
 
     def _request(self, url, method='GET', format=None, body='', headers=None):
         params = {
@@ -450,6 +460,7 @@ if __name__ == '__main__':
     logger.info('args: %s', args)
 
     # auth
+    access_token = None
     if not args.authfile.startswith('/'):
         args.authfile = os.path.join(CWD, args.authfile)
     if os.path.exists(args.authfile):
@@ -457,32 +468,48 @@ if __name__ == '__main__':
         logger.debug('found auth file at: %s', args.authfile)
         token, secret = open(args.authfile).read().strip().split('\n')
         access_token  = oauth.Token(token, secret)
-    else:
-        # OAuth authorization
-        logger.debug("let's start the OAuth dance!")
-        print('starting authorization..')
-        request_token  = step1_get_request_token(consumer, args.ecoghost)
-        oauth_verifier = step2_user_authorization(request_token, args.ecoghost)
-        access_token   = step3_get_access_token(consumer, request_token, oauth_verifier, args.ecoghost)
-        logger.debug("dance time is over.")
-        # save to auth file
-        accepted = 'n'
-        while accepted.lower() == 'n':
-            accepted = raw_input('Do you want to save access token for later? (Y/n) ')
-        with open(args.authfile, 'w') as f:
-            f.write(access_token.key + '\n')
-            f.write(access_token.secret + '\n')
-    logger.debug('access token: %s', access_token.key)
+        logger.debug('access token: %s', access_token.key)
 
     # EcoWiki
     ecog = EcogWiki(args.ecoghost, access_token)
-    now  = datetime.datetime.now()
 
     #
     # Commands
     #
+    now = datetime.datetime.now()
+    def require_authorization(consumer, host):
+        access_token = oauth_dance(consumer, host)
+        print "You may now access protected resources using the access tokens above." 
+        accepted = raw_input('Do you want to save access token for later? (Y/n) ')
+        if accepted != 'n':
+            save_authfile(access_token, args.authfile)
+        else:
+            print('very well...')
+        return access_token
 
-    # list
+    def trying_auth_on_forbidden(command, *args, **kwargs):
+        try:
+            command(*args, **kwargs)
+        except HTTPError as e:
+            if e.code == 403 and ecog.access_token is None:
+                # authorize
+                yn = raw_input('access is restricted. Do you want to authorize? (Y/n) ')
+                if yn.lower() == 'y':
+                    access_token = require_authorization(consumer, ecog.baseurl)
+                    ecog.set_access_token(access_token)
+                    # retry
+                    try:
+                        command(*args, **kwargs)
+                    except HTTPError as e:
+                        print(e.code, e.msg)
+                        sys.exit(e.code)
+                else:
+                    print(e.code, e.msg)
+                    sys.exit(e.code)
+            else:
+                print(e.code, e.msg)
+                sys.exit(e.code)
+
     def updated_datetime(entry):
         timestamp = int(time.strftime("%s", entry.updated_parsed))
         return datetime.datetime.fromtimestamp(timestamp)
@@ -493,12 +520,13 @@ if __name__ == '__main__':
             updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
         return updated_time
 
+    # list
     if args.command == 'list':
         entries = ecog.list().entries
         max_author_width = max(len(e.author) for e in entries)
         for entry in entries:
             dt = updated_datetime(entry)
-            print("%s  %s  %s" % (
+            print("%s  %s  %s  %s" % (
                 entry.author.ljust(max_author_width), 
                 format_updated_datetime(dt),
                 entry.title
@@ -537,45 +565,40 @@ if __name__ == '__main__':
 
     # get
     elif args.command == 'get':
-        try:
+        def get_command(title, revision):
             content = ecog.get(title=args.title, revision=args.revision)
 
             # sort by specific key order
             key_order = ["title", "revision", "updated_at", "modifier", "acl_read", "acl_write", "data", "body"]
             content = collections.OrderedDict(sorted(content.items(), key=lambda (k,v): key_order.index(k)))
+
             # trim body
             if content['body'] > 62: # 79 - 4(indent) - 6("body") - 2(: ) - 2("") - 3(...)
                 content['body'] = content['body'][:62] + '...'
 
             print(json.dumps(content, indent=4))
-        except HTTPError as e:
-            print(e.code, e.msg)
-            sys.exit(e.code)
+
+        trying_auth_on_forbidden(get_command, title=args.title, revision=args.revision)
 
     # cat
     elif args.command == 'cat':
-        try:
-            content = ecog.cat(title=args.title, revision=args.revision)
+        def cat_command(title, revision):
+            content = ecog.cat(title=title, revision=revision)
             print(content)
-        except HTTPError as e:
-            print(e.code, e.msg)
-            sys.exit(e.code)
+
+        trying_auth_on_forbidden(cat_command, title=args.title, revision=args.revision)
 
     # edit
     elif args.command == 'edit':
-        try:
-            ecog.edit(title=args.title, r0_template=args.template, comment=args.comment)
-        except HTTPError as e:
-            print(e.code, e.msg)
-            sys.exit(e.code)
+        #ecog.edit(title=args.title, r0_template=args.template, comment=args.comment)
+        trying_auth_on_forbidden(ecog.edit, 
+            title=args.title, r0_template=args.template, comment=args.comment)
 
     # memo
     elif args.command == 'memo':
-        try:
-            title = 'memo/%s' % now.strftime("%Y-%m-%d")
-            ecog.edit(title=title, r0_template='.write janghwan@gmail.com\n')
-        except HTTPError as e:
-            print(e.code, e.msg)
-            sys.exit(e.code)
+        #ecog.edit(title='memo/%s' % now.strftime("%y-%m-%d"), r0_template='.write janghwan@gmail.com\n')
+        trying_auth_on_forbidden(ecog.edit, 
+            title='memo/%s' % now.strftime("%y-%m-%d"), 
+            r0_template=args.template, comment=args.comment)
 
 
