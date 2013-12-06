@@ -447,8 +447,8 @@ if __name__ == '__main__':
     
     edit_parser.add_argument('title', metavar='TITLE', help='page title')
     edit_parser.add_argument('--template', metavar='TEXT', help='text on new file', default=None)
-    edit_parser.add_argument('--comment',  metavar='TEXT', help='text on new file', default=None)
-    memo_parser.add_argument('--comment',  metavar='TEXT', help='text on new file', default=None)
+    edit_parser.add_argument('--comment',  metavar='TEXT', help='edit comment message', default='')
+    memo_parser.add_argument('--comment',  metavar='TEXT', help='edit comment message', default='')
     get_parser.add_argument('title', metavar='TITLE', help='page title')
     cat_parser.add_argument('title', metavar='TITLE', help='page title')
     get_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
@@ -486,6 +486,7 @@ if __name__ == '__main__':
             save_authfile(access_token, args.authfile)
         else:
             print('very well...')
+        print('')
         return access_token
 
     def try_auth_on_forbidden(command):
@@ -497,6 +498,8 @@ if __name__ == '__main__':
                     # authorize
                     yn = raw_input('access is restricted. Do you want to authorize? (Y/n) ')
                     if yn.lower() == 'y':
+                        print('')
+
                         access_token = require_authorization(consumer, ecog.baseurl)
                         ecog.set_access_token(access_token)
                         # retry
@@ -529,12 +532,11 @@ if __name__ == '__main__':
         max_author_width = max(len(e.author) for e in entries)
         for entry in entries:
             dt = updated_datetime(entry)
-            print("%s  %s  %s  %s" % (
+            print("%s  %s  %s" % (
                 entry.author.ljust(max_author_width), 
                 format_updated_datetime(dt),
                 entry.title
             ))
-        print('')
 
     # recents
     elif args.command == 'recent':
