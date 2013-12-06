@@ -460,6 +460,7 @@ if __name__ == '__main__':
     else:
         # OAuth authorization
         logger.debug("let's start the OAuth dance!")
+        print('starting authorization..')
         request_token  = step1_get_request_token(consumer, args.ecoghost)
         oauth_verifier = step2_user_authorization(request_token, args.ecoghost)
         access_token   = step3_get_access_token(consumer, request_token, oauth_verifier, args.ecoghost)
@@ -482,38 +483,57 @@ if __name__ == '__main__':
     #
 
     # list
+    def updated_datetime(entry):
+        timestamp = int(time.strftime("%s", entry.updated_parsed))
+        return datetime.datetime.fromtimestamp(timestamp)
+    def format_updated_datetime(dt):
+        if now - dt <= datetime.timedelta(days=180):
+            updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
+        else:
+            updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
+        return updated_time
+
     if args.command == 'list':
-        for entry in ecog.list().entries:
-            dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
-            if now - dt <= datetime.timedelta(days=180):
-                updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
-            else:
-                updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
-
-            print("%s %s %s" % (entry.author, updated_time, entry.title))
-        print()
-
-    # title
-    elif args.command == 'title':
-        for title in ecog.all():
-            print(title)
+        entries = ecog.list().entries
+        max_author_width = max(len(e.author) for e in entries)
+        for entry in entries:
+            dt = updated_datetime(entry)
+            print("%s  %s  %s" % (
+                entry.author.ljust(max_author_width), 
+                format_updated_datetime(dt),
+                entry.title
+            ))
+        print('')
 
     # recents
     elif args.command == 'recent':
-        for entry in ecog.recent().entries:
-            dt = datetime.datetime.fromtimestamp(int(time.strftime("%s", entry.updated_parsed)))
-            if now - dt <= datetime.timedelta(days=180):
-                updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
-            else:
-                updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
-
+        entries = ecog.recent().entries
+        def summary_size(entry):
             size = 0
             try:
                 size = len(entry.summary)
             except:
                 logger.warning('no summary for entry: %s', entry.title)
-            print("%s %d %s %s" % (entry.author, size, updated_time, entry.title))
-        print()
+            return size
+
+        max_author_width = max(len(e.author) for e in entries)
+        summary_sizes    = [summary_size(e)  for e in entries]
+        max_size_width   = len(str(max(summary_sizes)))
+
+        for i,entry in enumerate(entries):
+            dt = updated_datetime(entry)
+            print("%s  %s  %s  %s" % (
+                entry.author.ljust(max_author_width), 
+                str(summary_size(entry)).rjust(max_size_width), 
+                format_updated_datetime(dt),
+                entry.title
+            ))
+        print('')
+
+    # title
+    elif args.command == 'title':
+        for title in ecog.all():
+            print(title)
 
     # get
     elif args.command == 'get':
