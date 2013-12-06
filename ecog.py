@@ -327,7 +327,7 @@ class EcogWiki(object):
         logger.info('[cat] %s revision:%s', title, str(revision))
         return self.get(title, format='rawbody', revision=revision)
 
-    def edit(self, title, r0_template=None):
+    def edit(self, title, comment='', r0_template=None):
         ''' open editor and send post after save 
 
         1. get page metadata and save
@@ -367,26 +367,26 @@ class EcogWiki(object):
                     # 3. open temp file with editor
                     ret = subprocess.call(editor.split() + [temp_rawbody])
                     if ret != 0:
-                        print 'editor %s failed with status %d, aborting.' % (editor, ret)
+                        print('editor %s failed with status %d, aborting.' % (editor, ret))
                         return
                     # 4. confirm content
                     content = ''
                     with open(temp_rawbody) as f:
                         content = f.read()
                     if (revision > 0 and content == rawbody) or (revision == 0 and content == r0_template):
-                        print 'nothing new, aborting.'
+                        print('nothing new, aborting.')
                         return
                     if len(content) == 0:
-                        print 'empty content, aborting.'
+                        print('empty content, aborting.')
                         return
                     # 5. ask comment
-                    comment = raw_input('comment (default: written by ecogwiki client): ')
-                    comment = comment or 'post by ecogwiki client'
+                    if not comment:
+                        comment = raw_input('comment message (default: written by ecogwiki client): ')
+                        comment = comment or 'post by ecogwiki client'
                     # 6. post page with new content
                     result = self.post(title, content, revision=revision, comment=comment)
                     logger.debug('[edit] %s', result)
-                    print result['revision'], type(result['revision'])
-                    print 'updated %s to revision %d' % (title, int(result['revision']))
+                    print('updated %s to revision %d' % (title, int(result['revision'])))
                     return result
                 finally:
                     try:
@@ -437,6 +437,7 @@ if __name__ == '__main__':
     
     edit_parser.add_argument('title', metavar='TITLE', help='page title')
     edit_parser.add_argument('--template', metavar='TEXT', help='text on new file', default=None)
+    edit_parser.add_argument('--comment', metavar='TEXT', help='text on new file', default=None)
     get_parser.add_argument('title', metavar='TITLE', help='page title')
     cat_parser.add_argument('title', metavar='TITLE', help='page title')
     get_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
@@ -543,7 +544,7 @@ if __name__ == '__main__':
     # edit
     elif args.command == 'edit':
         try:
-            ecog.edit(title=args.title, r0_template=args.template)
+            ecog.edit(title=args.title, r0_template=args.template, comment=args.comment)
         except HTTPError as e:
             print(e.code, e.msg)
             sys.exit(e.code)
