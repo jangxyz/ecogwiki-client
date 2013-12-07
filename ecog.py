@@ -13,6 +13,7 @@ import urlparse
 import urllib
 import subprocess
 import logging
+import traceback
 from urllib2 import HTTPError
 
 import oauth2 as oauth
@@ -29,21 +30,16 @@ editor = os.environ.get('EDITOR', 'vi')
 
 formatter = logging.Formatter(fmt="%(asctime)s %(levelname)s %(message)s", datefmt='[%H:%M:%S]')
 
-#logging.basicConfig(filename='log/log', filemode='w', level=logging.INFO)
-#logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", datefmt='[%H:%M:%S]')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 info_handler = logging.FileHandler(os.path.join(CWD, 'log', 'info.log'))
-#info_handler.setFormatter(formatter)
 info_handler.setLevel(logging.INFO)
 
 debug_handler = logging.FileHandler(os.path.join(CWD, 'log', 'debug.log'))
-#debug_handler.setFormatter(formatter)
 debug_handler.setLevel(logging.DEBUG)
 
 error_handler = logging.FileHandler(os.path.join(CWD, 'log', 'error.log'))
-#error_handler.setFormatter(formatter)
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
@@ -122,7 +118,7 @@ def step2_user_authorization(request_token, host):
 
     output("Go to the following link in your browser:")
     output("%s?oauth_token=%s" % (authorize_url, request_token.key))
-    print
+    output()
 
     # After the user has granted access to you, the consumer, the provider will
     # redirect you to whatever URL you have told them to redirect to. You can 
@@ -132,7 +128,7 @@ def step2_user_authorization(request_token, host):
         accepted = raw_input('Have you authorized me? (y/N) ')
 
     oauth_verifier = raw_input('What is the PIN? ')
-    print
+    output()
 
     return oauth_verifier
 
@@ -195,7 +191,7 @@ def _request(consumer, access_token, url, method='GET', headers=None, body=None)
     if resp['status'] != '200':
         status = int(resp['status'])
         msg    = httplib.responses.get(status, "Invalid response %d." % status)
-        logger.error("[_request] %d %s", status, msg)
+        logger.debug("[_request] Error: %d %s", status, msg)
         raise HTTPError(url, status, msg, None, None)
     return resp, content
 
@@ -278,10 +274,11 @@ class EcogWiki(object):
         #
         resp, content = self.client.request(url, method, body=body)
         logger.debug('[_request] response: %s', resp)
+        logger.debug('[_request] content: %s', content)
         if resp['status'] != '200':
             status = int(resp['status'])
             msg    = httplib.responses.get(status, "Invalid response %d." % status)
-            logger.error("[_request] %d %s", status, msg)
+            logger.debug("[_request] Error: %d %s", status, msg)
             raise HTTPError(url, status, msg, None, None)
         return resp, content
 
@@ -292,13 +289,18 @@ class EcogWiki(object):
         if revision:
             url += '?rev=' + str(revision)
         # request
-        resp, content = self._request(url, format=format)
+        try:
+            resp, content = self._request(url, format=format)
+        except HTTPError as e:
+            logger.error("[get] %d %s", e.code, e.msg)
+            raise
+
         if format == 'json':
             content = json.loads(content)
         return content
 
     def post(self, title, body, revision=None, comment=''):
-        logger.info('[post] %s format:%s revision:%d comment:%s', title, format, int(revision), comment)
+        logger.info('[post] %s size: %d revision:%d comment:%s', title, len(body), int(revision), comment)
         if revision is None:
             data = self.get(title)
             revision = data['revision']
@@ -309,112 +311,51 @@ class EcogWiki(object):
             'revision': revision,
             'comment': comment or 'post by ecogwiki client',
         })
-        resp, content = self._request(url, format='json', method='POST', body=data)
-        content = json.loads(content)
-        return content
+        try:
+            resp, content = self._request(url, format='json', method='POST', body=data)
+            content = json.loads(content)
+            return content
+        except HTTPError as e:
+            logger.error("[post] %d %s", e.code, e.msg)
+            raise
 
     def list(self):
         ''' shorthand for GET /sp.index?_type=atom '''
         logger.info('[list] /sp.index?_type=atom')
         url = urllib.basejoin(self.baseurl, 'sp.index')
-        resp, content = self._request(url, format='atom')
-        return self._parse_feed(content)
+        try:
+            resp, content = self._request(url, format='atom')
+            return self._parse_feed(content)
+        except HTTPError as e:
+            logger.error("[list] %d %s", e.code, e.msg)
+            raise
 
     def all(self):
         ''' shorthand for GET /sp.titles?_type=json '''
         logger.info('[all] /sp.titles?_type=json')
         url = urllib.basejoin(self.baseurl, 'sp.titles')
-        resp, content = self._request(url, format='json')
-        return json.loads(content)
+        try:
+            resp, content = self._request(url, format='json')
+            return json.loads(content)
+        except HTTPError as e:
+            logger.error("[all] %d %s", e.code, e.msg)
+            raise
 
     def recent(self):
         ''' shorthand for GET /sp.changes?_type=atom '''
         logger.info('[recent] /sp.changes?_type=atom')
         url = urllib.basejoin(self.baseurl, 'sp.changes')
-        resp, content = self._request(url, format='atom')
-        return self._parse_feed(content)
+        try:
+            resp, content = self._request(url, format='atom')
+            return self._parse_feed(content)
+        except HTTPError as e:
+            logger.error("[recent] %d %s", e.code, e.msg)
+            raise
 
     def cat(self, title, revision=None):
         ''' shorthand for GET TITLE?_type=rawbody '''
         logger.info('[cat] %s revision:%s', title, str(revision))
         return self.get(title, format='rawbody', revision=revision)
-
-    def edit(self, title, comment='', r0_template=None):
-        ''' open editor and send post after save 
-
-        1. get page metadata and save
-        2. get page rawdata with revision and save
-        3. open tempfile with rawbody
-        4. after save, read tempfile and confirm content
-        5. ask comment
-        6. post page with new content
-        7. remove temp files
-        '''
-        logger.info('[edit] %s', title)
-        if r0_template and not r0_template.endswith("\n"):
-            r0_template += "\n\n"
-
-        tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
-        logger.debug('[edit] temp directory: %s', tempdir)
-        try:
-            # 1. get page metadata
-            jsondata   = self.get(title, format='json')
-            safe_title = urllib.quote_plus(title)
-            fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
-            logger.debug('[edit] "%s" meta file: %s', title, temp_json)
-            try:
-                with open(temp_json, 'w') as f:
-                    json.dump(jsondata, f, indent=4)
-                # 2. get page rawdata
-                revision = jsondata['revision']
-                rawbody  = self.get(title, format='rawbody', revision=revision)
-                fd, temp_rawbody = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
-                logger.debug('[edit] "%s" rawbody file: %s', title, temp_rawbody)
-                try:
-                    with open(temp_rawbody, 'w') as f:
-                        if revision > 0:
-                            f.write(rawbody)
-                        elif r0_template:
-                            f.write(r0_template)
-                    # 3. open temp file with editor
-                    ret = subprocess.call(editor.split() + [temp_rawbody])
-                    if ret != 0:
-                        output('editor %s failed with status %d, aborting.' % (editor, ret))
-                        return
-                    # 4. confirm content
-                    content = ''
-                    with open(temp_rawbody) as f:
-                        content = f.read()
-                    if (revision > 0 and content == rawbody) or (revision == 0 and content == r0_template):
-                        output('nothing new, aborting.')
-                        return
-                    if len(content) == 0:
-                        output('empty content, aborting.')
-                        return
-                    # 5. ask comment
-                    if not comment:
-                        comment = raw_input('comment message (default: written by ecogwiki client): ')
-                        comment = comment or 'post by ecogwiki client'
-                    # 6. post page with new content
-                    result = self.post(title, content, revision=revision, comment=comment)
-                    logger.debug('[edit] %s', result)
-                    output('updated %s to revision %d' % (title, int(result['revision'])))
-                    return result
-                finally:
-                    try:
-                        os.remove(temp_rawbody)
-                    except OSError as e:
-                        logger.error('[edit] %s', e)
-            finally:
-                try:
-                    os.remove(temp_json)
-                except OSError as e:
-                    logger.error('[edit] %s', e)
-        finally:
-            try:
-                os.removedirs(tempdir)
-            except OSError as e:
-                logger.error('[edit] %s', e)
     
     #def search(self, title):
     #    pass
@@ -462,8 +403,6 @@ if __name__ == '__main__':
     if '://' not in args.ecoghost:
         args.ecoghost = 'http://' + args.ecoghost
 
-    logger.info('args: %s', args)
-
     # auth
     access_token = None
     if not args.authfile.startswith('/'):
@@ -508,35 +447,35 @@ if __name__ == '__main__':
             save_authfile(access_token, args.authfile)
         else:
             output('very well...')
-        print
+        output()
         return access_token
 
-    def try_auth_on_forbidden(command):
-        def run(*args, **kwargs):
-            try:
-                command(*args, **kwargs)
-            except HTTPError as e:
-                if e.code == 403 and ecog.access_token is None:
-                    # authorize
-                    yn = raw_input('Access is restricted. Do you want to authorize? (Y/n) ')
-                    if yn.lower() == 'y':
-                        print
+    def try_auth_on_forbidden(ecog):
+        ''' if request failed with 403 Forbidden, guide user to auth, and try once more.
 
-                        access_token = require_authorization(consumer, ecog.baseurl)
-                        ecog.set_access_token(access_token)
-                        # retry
-                        try:
-                            command(*args, **kwargs)
-                        except HTTPError as e:
-                            output(e.code, e.msg)
-                            sys.exit(e.code)
-                    else:
-                        output(e.code, e.msg)
-                        sys.exit(e.code)
-                else:
-                    output(e.code, e.msg)
-                    sys.exit(e.code)
-        return run
+        '''
+        def command_runner(command):
+            def run(*args, **kwargs):
+                try:
+                    return command(*args, **kwargs)
+                except HTTPError as e:
+                    if e.code == 403 and ecog.access_token is None:
+                        # authorize
+                        yn = raw_input('Access is restricted. Do you want to authorize? (Y/n) ')
+                        if yn.lower() == 'y':
+                            output()
+
+                            access_token = require_authorization(consumer, ecog.baseurl)
+                            ecog.set_access_token(access_token)
+                            # retry
+                            try:
+                                # actual command is run here.
+                                return command(*args, **kwargs)
+                            except HTTPError as e:
+                                raise
+                    raise
+            return run
+        return command_runner
 
     def updated_datetime(entry):
         timestamp = int(time.strftime("%s", entry.updated_parsed))
@@ -587,7 +526,7 @@ if __name__ == '__main__':
                 format_updated_datetime(dt),
                 entry.title
             ))
-        print
+        output()
 
     # title
     elif args.command == 'title':
@@ -596,7 +535,7 @@ if __name__ == '__main__':
 
     # get
     elif args.command == 'get':
-        @try_auth_on_forbidden
+        @try_auth_on_forbidden(ecog)
         def get_command(title, revision, format):
             if format == 'html':     format = 'body'
             if format == 'markdown': format = 'rawbody'
@@ -617,32 +556,151 @@ if __name__ == '__main__':
             else:
                 output(content)
 
-        get_command(title=args.title, revision=args.revision, format=args.format)
+        try:
+            get_command(title=args.title, revision=args.revision, format=args.format)
+        except HTTPError as e:
+            logger.error(traceback.format_exc())
+            output(e.code, e.msg)
+            sys.exit(e.code/100)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
+            sys.exit(1)
 
     # cat
     elif args.command == 'cat':
-        @try_auth_on_forbidden
+        @try_auth_on_forbidden(ecog)
         def cat_command(title, revision):
             content = ecog.cat(title=title, revision=revision)
             output(content)
 
-        cat_command(title=args.title, revision=args.revision)
+        try:
+            cat_command(title=args.title, revision=args.revision)
+        except HTTPError as e:
+            logger.error(traceback.format_exc())
+            output(e.code, e.msg)
+            sys.exit(e.code/100)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
+            sys.exit(1)
 
     # edit
     elif args.command == 'edit':
-        @try_auth_on_forbidden
+        @try_auth_on_forbidden(ecog)
         def edit_command(title, r0_template, comment):
-            ecog.edit(title=title, r0_template=r0_template, comment=comment)
+            ''' open editor and send post after save 
 
-        edit_command(title=args.title, r0_template=args.template, comment=args.comment)
+            1. [GET] get page metadata and save temp file
+            2. [GET] get page rawdata with revision and save temp file
+            3. open tempfile with rawbody, and let user edit
+            4. after edit is finished, confirm tempfile
+            5. ask for comment
+            6. [POST] post page with new content
+            7. remove temp files
+            '''
+            logger.info('[edit] %s', title)
+            if r0_template and not r0_template.endswith("\n"):
+                r0_template += "\n\n"
+
+            tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
+            logger.debug('[edit] temp directory: %s', tempdir)
+            try:
+                # 1. [GET] get page metadata
+                ecog_get   = try_auth_on_forbidden(ecog)(ecog.get)
+                jsondata   = ecog_get(title, format='json')
+                revision   = jsondata['revision']
+                safe_title = urllib.quote_plus(title)
+                fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
+                logger.debug('[edit] "%s" meta file: %s', title, temp_json)
+                try:
+                    with open(temp_json, 'w') as f:
+                        json.dump(jsondata, f, indent=4)
+                    # 2. [GET] get page rawdata
+                    rawbody = ecog_get(title, format='rawbody', revision=revision)
+                    fd, temp_rawbody = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
+                    logger.debug('[edit] "%s" rawbody file: %s', title, temp_rawbody)
+                    with open(temp_rawbody, 'w') as f:
+                        if revision > 0:
+                            f.write(rawbody)
+                        elif r0_template:
+                            f.write(r0_template)
+                    try:
+                        # 3. open temp file with editor
+                        ret = subprocess.call(editor.split() + [temp_rawbody])
+                        if ret != 0:
+                            output('editor %s failed with status %d, aborting.' % (editor, ret))
+                            return
+                        # 4. confirm content
+                        content = ''
+                        with open(temp_rawbody) as f:
+                            content = f.read()
+                        if (revision > 0 and content == rawbody) or (revision == 0 and content == r0_template):
+                            output('nothing new, aborting.')
+                            return
+                        if len(content) == 0:
+                            output('empty content, aborting.')
+                            return
+                        # 5. ask comment
+                        if not comment:
+                            comment = raw_input('comment message (default: written by ecogwiki client): ')
+                            comment = comment or 'post by ecogwiki client'
+                        # 6. [POST] post page with new content
+                        ecog_post = try_auth_on_forbidden(ecog)(ecog.post)
+                        result = ecog_post(title, content, revision=revision, comment=comment)
+                        logger.debug('[edit] %s', result)
+                        output('updated %s to revision %d' % (title, int(result['revision'])))
+
+                        # 7. remove temp file on success
+                        try:
+                            os.remove(temp_rawbody)
+                        except OSError as e:
+                            logger.error('[edit] failed removing temp rawbody file %s, %s', temp_rawbody, e)
+
+                        return result
+                    except Exception as e:
+                        output('error during edit. temporary file is saved at: %s' % temp_rawbody)
+                        logger.error('[edit] %s', e)
+                        raise
+                    finally:
+                        pass
+                finally:
+                    try:
+                        os.remove(temp_json)
+                    except OSError as e:
+                        logger.error('[edit] failed removing temp json file %s (%s)', temp_json, e)
+            finally:
+                try:
+                    os.removedirs(tempdir)
+                except OSError as e:
+                    logger.error('[edit] failed removing temp directory %s, %s', tempdir, e)
+
+        try:
+            edit_command(title=args.title, r0_template=args.template, comment=args.comment)
+        except HTTPError as e:
+            logger.error(traceback.format_exc())
+            output(e.code, e.msg)
+            sys.exit(e.code/100)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
+            sys.exit(1)
 
     # memo
     elif args.command == 'memo':
-        @try_auth_on_forbidden
+        @try_auth_on_forbidden(ecog)
         def memo_command(comment):
             title = 'memo/%s' % now.strftime("%y-%m-%d")
             ecog.edit(title=title, r0_template='.write janghwan@gmail.com\n', comment=comment)
 
-        memo_command(comment=args.comment)
-
+        try:
+            memo_command(comment=args.comment)
+        except HTTPError as e:
+            logger.error(traceback.format_exc())
+            output(e.code, e.msg)
+            sys.exit(e.code/100)
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
+            sys.exit(1)
 
