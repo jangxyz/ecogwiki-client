@@ -95,6 +95,9 @@ You can request data for a specific revision of page with `--revision`.
 	optional arguments:
 	  -h, --help      show this help message and exit
 	  --revision REV  specific revision number
+      --format FORMAT  one of [json|html|markdown|atom], json by default
+
+Note other formats are also possible.
 
 # cat
 
@@ -110,6 +113,8 @@ You can request data for a specific revision of page with `--revision`.
 	optional arguments:
 	  -h, --help      show this help message and exit
 	  --revision REV  specific revision number
+
+Note this is shorthand for `ecog get --format=markdown`
 
 # edit
 

@@ -120,9 +120,9 @@ def step2_user_authorization(request_token, host):
         host = "https://%s" % urlparse.urlparse(host).hostname
     authorize_url = "%s/_ah/OAuthAuthorizeToken" % host.rstrip('/')
 
-    print("Go to the following link in your browser:")
-    print("%s?oauth_token=%s" % (authorize_url, request_token.key))
-    print('')
+    print "Go to the following link in your browser:"
+    print "%s?oauth_token=%s" % (authorize_url, request_token.key)
+    print
 
     # After the user has granted access to you, the consumer, the provider will
     # redirect you to whatever URL you have told them to redirect to. You can 
@@ -132,7 +132,7 @@ def step2_user_authorization(request_token, host):
         accepted = raw_input('Have you authorized me? (y/N) ')
 
     oauth_verifier = raw_input('What is the PIN? ')
-    print('')
+    print
 
     return oauth_verifier
 
@@ -272,7 +272,7 @@ class EcogWiki(object):
 
         url = to_url(url, params)
         logger.debug('[_request] %s %s', method, url)
-        #pprint(('params:', req._split_url_string(urlparse.urlparse(uri)[4])))
+        #pprint ('params:', req._split_url_string(urlparse.urlparse(uri)[4]))
         if body:
             logger.debug('[_request] body: %s', body)
         #
@@ -287,9 +287,11 @@ class EcogWiki(object):
 
     def get(self, title, format='json', revision=None):
         logger.info('[get] %s format:%s revision:%s', title, format, str(revision))
+        # form url
         url = urllib.basejoin(self.baseurl, title)
         if revision:
             url += '?rev=' + str(revision)
+        # request
         resp, content = self._request(url, format=format)
         if format == 'json':
             content = json.loads(content)
@@ -377,17 +379,17 @@ class EcogWiki(object):
                     # 3. open temp file with editor
                     ret = subprocess.call(editor.split() + [temp_rawbody])
                     if ret != 0:
-                        print('editor %s failed with status %d, aborting.' % (editor, ret))
+                        print 'editor %s failed with status %d, aborting.' % (editor, ret)
                         return
                     # 4. confirm content
                     content = ''
                     with open(temp_rawbody) as f:
                         content = f.read()
                     if (revision > 0 and content == rawbody) or (revision == 0 and content == r0_template):
-                        print('nothing new, aborting.')
+                        print 'nothing new, aborting.'
                         return
                     if len(content) == 0:
-                        print('empty content, aborting.')
+                        print 'empty content, aborting.'
                         return
                     # 5. ask comment
                     if not comment:
@@ -396,7 +398,7 @@ class EcogWiki(object):
                     # 6. post page with new content
                     result = self.post(title, content, revision=revision, comment=comment)
                     logger.debug('[edit] %s', result)
-                    print('updated %s to revision %d' % (title, int(result['revision'])))
+                    print 'updated %s to revision %d' % (title, int(result['revision']))
                     return result
                 finally:
                     try:
@@ -453,6 +455,8 @@ if __name__ == '__main__':
     cat_parser.add_argument('title', metavar='TITLE', help='page title')
     get_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
     cat_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
+    get_parser.add_argument('--format', metavar='FORMAT', help='one of [json|html|markdown|atom], json by default',
+        choices=['json', 'rawbody', 'body', 'atom', 'markdown', 'html'], default='json')
 
     args = parser.parse_args()
     if '://' not in args.ecoghost:
@@ -485,8 +489,8 @@ if __name__ == '__main__':
         if accepted != 'n':
             save_authfile(access_token, args.authfile)
         else:
-            print('very well...')
-        print('')
+            print 'very well...'
+        print
         return access_token
 
     def try_auth_on_forbidden(command):
@@ -496,9 +500,9 @@ if __name__ == '__main__':
             except HTTPError as e:
                 if e.code == 403 and ecog.access_token is None:
                     # authorize
-                    yn = raw_input('access is restricted. Do you want to authorize? (Y/n) ')
+                    yn = raw_input('Access is restricted. Do you want to authorize? (Y/n) ')
                     if yn.lower() == 'y':
-                        print('')
+                        print
 
                         access_token = require_authorization(consumer, ecog.baseurl)
                         ecog.set_access_token(access_token)
@@ -506,13 +510,13 @@ if __name__ == '__main__':
                         try:
                             command(*args, **kwargs)
                         except HTTPError as e:
-                            print(e.code, e.msg)
+                            print e.code, e.msg
                             sys.exit(e.code)
                     else:
-                        print(e.code, e.msg)
+                        print e.code, e.msg
                         sys.exit(e.code)
                 else:
-                    print(e.code, e.msg)
+                    print e.code, e.msg
                     sys.exit(e.code)
         return run
 
@@ -561,37 +565,44 @@ if __name__ == '__main__':
                 format_updated_datetime(dt),
                 entry.title
             ))
-        print('')
+        print
 
     # title
     elif args.command == 'title':
         for title in ecog.all():
-            print(title)
+            print title
 
     # get
     elif args.command == 'get':
         @try_auth_on_forbidden
-        def get_command(title, revision):
-            content = ecog.get(title=title, revision=revision)
+        def get_command(title, revision, format):
+            if format == 'html':     format = 'body'
+            if format == 'markdown': format = 'rawbody'
 
-            # sort by specific key order
-            key_order = ["title", "revision", "updated_at", "modifier", "acl_read", "acl_write", "data", "body"]
-            content = collections.OrderedDict(sorted(content.items(), key=lambda (k,v): key_order.index(k)))
+            #
+            content = ecog.get(title=title, revision=revision, format=format)
 
-            # trim body
-            if content['body'] > 62: # 79 - 4(indent) - 6("body") - 2(: ) - 2("") - 3(...)
-                content['body'] = content['body'][:62] + '...'
+            if format == 'json':
+                # sort by specific key order
+                key_order = ["title", "revision", "updated_at", "modifier", "acl_read", "acl_write", "data", "body"]
+                content = collections.OrderedDict(sorted(content.items(), key=lambda (k,v): key_order.index(k)))
 
-            print(json.dumps(content, indent=4))
+                # trim body
+                if content['body'] > 62: # 79 - 4(indent) - 6("body") - 2(: ) - 2("") - 3(...)
+                    content['body'] = content['body'][:62] + '...'
 
-        get_command(title=args.title, revision=args.revision)
+                print json.dumps(content, indent=4)
+            else:
+                print content
+
+        get_command(title=args.title, revision=args.revision, format=args.format)
 
     # cat
     elif args.command == 'cat':
         @try_auth_on_forbidden
         def cat_command(title, revision):
             content = ecog.cat(title=title, revision=revision)
-            print(content)
+            print content
 
         cat_command(title=args.title, revision=args.revision)
 
