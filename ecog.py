@@ -19,9 +19,10 @@ from urllib2 import HTTPError
 import oauth2 as oauth
 import feedparser
 
+__version__ = '0.7.21'
+
 #CWD  = os.path.dirname(os.path.realpath(__file__))
 CWD = os.path.join(os.path.expanduser('~'), '.ecog')
-
 
 client_id     = '576416393937-rmcaesbkv0rfdcq71l5ol9p3sbmv1qf9.apps.googleusercontent.com'
 client_secret = 'f_7_soOcc_SZhlDzLfUB0d-t'
@@ -48,7 +49,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-logger.addHandler(debug_handler)
+#logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 

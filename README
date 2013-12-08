@@ -3,9 +3,24 @@
 
 # Install
 
-Copy the ecog.py file
+You only need the `ecog.py` file, with two dependencies: [`oauth2`, `feedparser`]
 
-# Commands
+Requires python 2.7 or higher.
+
+
+## pip
+
+	pip install ecog
+
+A runnable `ecog` executable is installed to use right away.
+
+
+## Manual
+
+Download the `ecog.py` file and start using it.
+
+
+# Commands List
 
 * title  - print page titles (think of `ls -1`)
 * list   - list wiki pages with simple info (think of `ls -l`)
@@ -71,20 +86,21 @@ It may be a good idea to alias the default behavior, such as:
 Of course, you don't need to authorize at all if the page is not restricted.
 
 
-# title
+# Commands Description
+
+## title
 
 Prints list of titles for the page.
 
+## list
 
-# list
+Print list of pages with additional info. More detailed than [title](#title).
 
-Print list of pages with additional info. A bit more detailed than [title](#title).
+## recent
 
-# recent
+Show only recently changed files. More brief than [title](#title).
 
-Show only recently changed files. Bit more brief than [title](#title).
-
-# get 
+## get 
 
 Show metadata of the page, such as revision, last updated time, acls. The actual body is trimmed for readability.
 You can request data for a specific revision of page with `--revision`.
@@ -93,16 +109,16 @@ You can request data for a specific revision of page with `--revision`.
 	usage: ecog get [-h] [--revision REV] TITLE
 
 	positional arguments:
-	  TITLE           page title
+	  TITLE            page title
 
 	optional arguments:
-	  -h, --help      show this help message and exit
-	  --revision REV  specific revision number
+	  -h, --help       show this help message and exit
+	  --revision REV   specific revision number
       --format FORMAT  one of [json|html|markdown|atom], json by default
 
 Note other formats are also possible.
 
-# cat
+## cat
 
 Show actual content of the page. 
 You can request data for a specific revision of page with `--revision`.
@@ -119,7 +135,7 @@ You can request data for a specific revision of page with `--revision`.
 
 Note this is shorthand for `ecog get --format=markdown`
 
-# edit
+## edit
 
 Edit a page with system's default editor -- in most of the systems it's default to `vi`.
 
@@ -146,7 +162,7 @@ Note unchanged content is not saved.
 You may give a default text to begin with if you are creating a new page with `--template` option.
 
 
-# memo
+## memo
 
 Write a daily memo. `ecog` supports easy-to-write memo system.
 
@@ -161,5 +177,14 @@ Everytime you fire `ecog memo`, it will open a page titled `memo/YYYY-mm-dd` wit
 
 
 NOTE this is shorthand for `ecog edit memo/YYYY-mm-dd`.
+
+
+# TODO
+
+* user config files
+* print highlighted markdown
+* auto TAB-completion on titles
+* advanced commands like: `find`, `grep`
+* and much more to come..
 
 

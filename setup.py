@@ -19,7 +19,9 @@ setup(name='ecog',
     description = 'Ecogwiki OAuth client',
     long_description = __doc__,
     url = 'https://github.com/jangxyz/ecogwiki-client',
+
     py_modules = ['ecog'],
     scripts = ['ecog'],
+    install_requires = ['oauth2', 'feedparser'],
 )
 
