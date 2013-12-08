@@ -368,12 +368,8 @@ class EcogWiki(object):
     #    pass
 
 
-if __name__ == '__main__':
-    #
-    # args
-    #
+def parse_args():
     parser = argparse.ArgumentParser(description='Ecogwiki client', epilog='Information in your fingertips.')
-
     parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
                        help='auth file storing access token')
     parser.add_argument('--host', metavar='HOST', dest='ecoghost', default='www.ecogwiki.com',
@@ -402,6 +398,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if '://' not in args.ecoghost:
         args.ecoghost = 'http://' + args.ecoghost
+
+    return args
+
+if __name__ == '__main__':
+    args = parse_args()
 
     # auth
     access_token = None
