@@ -493,19 +493,23 @@ if __name__ == '__main__':
 
     # list
     if args.command == 'list':
-        entries = ecog.list().entries
-        max_author_width = max(len(e.author) for e in entries)
-        for entry in entries:
-            dt = updated_datetime(entry)
-            print("%s  %s  %s" % (
-                entry.author.ljust(max_author_width), 
-                format_updated_datetime(dt),
-                entry.title
-            ))
+        try:
+            entries = ecog.list().entries
+            max_author_width = max(len(e.author) for e in entries)
+            for entry in entries:
+                dt = updated_datetime(entry)
+                output("%s  %s  %s" % (
+                    entry.author.ljust(max_author_width), 
+                    format_updated_datetime(dt),
+                    entry.title
+                ))
+        except KeyboardInterrupt:
+            logger.error(traceback.format_exc())
+            output("Terminating.")
+            sys.exit(1)
 
     # recents
     elif args.command == 'recent':
-        entries = ecog.recent().entries
         def summary_size(entry):
             size = 0
             try:
@@ -513,25 +517,36 @@ if __name__ == '__main__':
             except:
                 logger.warning('no summary for entry: %s', entry.title)
             return size
+        try:
+            entries = ecog.recent().entries
 
-        max_author_width = max(len(e.author) for e in entries)
-        summary_sizes    = [summary_size(e)  for e in entries]
-        max_size_width   = len(str(max(summary_sizes)))
+            max_author_width = max(len(e.author) for e in entries)
+            summary_sizes    = [summary_size(e)  for e in entries]
+            max_size_width   = len(str(max(summary_sizes)))
 
-        for i,entry in enumerate(entries):
-            dt = updated_datetime(entry)
-            print("%s  %s  %s  %s" % (
-                entry.author.ljust(max_author_width), 
-                str(summary_size(entry)).rjust(max_size_width), 
-                format_updated_datetime(dt),
-                entry.title
-            ))
-        output()
+            for i,entry in enumerate(entries):
+                dt = updated_datetime(entry)
+                output("%s  %s  %s  %s" % (
+                    entry.author.ljust(max_author_width), 
+                    str(summary_size(entry)).rjust(max_size_width), 
+                    format_updated_datetime(dt),
+                    entry.title
+                ))
+            output()
+        except KeyboardInterrupt:
+            logger.error(traceback.format_exc())
+            output("Terminating.")
+            sys.exit(1)
 
     # title
     elif args.command == 'title':
-        for title in ecog.all():
-            output(title)
+        try:
+            for title in ecog.all():
+                output(title)
+        except KeyboardInterrupt:
+            logger.error(traceback.format_exc())
+            output("Terminating.")
+            sys.exit(1)
 
     # get
     elif args.command == 'get':
@@ -562,6 +577,10 @@ if __name__ == '__main__':
             logger.error(traceback.format_exc())
             output(e.code, e.msg)
             sys.exit(e.code/100)
+        except KeyboardInterrupt:
+            logger.error(traceback.format_exc())
+            output("Terminating.")
+            sys.exit(1)
         except Exception as e:
             logger.error(traceback.format_exc())
             output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
@@ -580,6 +599,10 @@ if __name__ == '__main__':
             logger.error(traceback.format_exc())
             output(e.code, e.msg)
             sys.exit(e.code/100)
+        except KeyboardInterrupt:
+            logger.error(traceback.format_exc())
+            output("Terminating.")
+            sys.exit(1)
         except Exception as e:
             logger.error(traceback.format_exc())
             output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
@@ -681,6 +704,10 @@ if __name__ == '__main__':
             logger.error(traceback.format_exc())
             output(e.code, e.msg)
             sys.exit(e.code/100)
+        except KeyboardInterrupt:
+            logger.error(traceback.format_exc())
+            output("Terminating.")
+            sys.exit(1)
         except Exception as e:
             logger.error(traceback.format_exc())
             output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
@@ -699,6 +726,10 @@ if __name__ == '__main__':
             logger.error(traceback.format_exc())
             output(e.code, e.msg)
             sys.exit(e.code/100)
+        except KeyboardInterrupt:
+            logger.error(traceback.format_exc())
+            output("Terminating.")
+            sys.exit(1)
         except Exception as e:
             logger.error(traceback.format_exc())
             output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
