@@ -3,24 +3,35 @@
 
 # Install
 
-You only need the `ecog.py` file, with two dependencies: [`oauth2`, `feedparser`]
+You only need the `ecog.py` file, with two dependencies: `oauth2`, `feedparser`
 
 Requires python 2.7 or higher.
 
 
-## pip
+## `pip` Install
 
 	pip install ecog
 
 A runnable `ecog` executable is installed to use right away.
 
 
-## Manual
+## Manual Install
 
 Download the `ecog.py` file and start using it.
 
 
-# Commands List
+# Getting Started
+
+try the following commands:
+
+`ecog list`
+
+`ecog cat Home`
+
+`ecog edit Home`
+
+
+## Commands List
 
 * title  - print page titles (think of `ls -1`)
 * list   - list wiki pages with simple info (think of `ls -l`)
@@ -29,6 +40,8 @@ Download the `ecog.py` file and start using it.
 * cat PAGE_TITLE  - print content of title, in markdown format
 * edit PAGE_TITLE - open default `EDITOR` to edit and save page
 * memo            - short, useful daily memo ;)
+
+
 
 # Usage
 
