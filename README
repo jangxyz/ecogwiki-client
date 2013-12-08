@@ -1,5 +1,9 @@
 
-This is a python client that talks with [ecogwiki](http://ecogwiki.com/). It could be configurable to talk with any other ecogwiki hosts.
+`ecog` is a python client that talks with [ecogwiki](http://www.ecogwiki.com/). It is configurable to talk with any other ecogwiki hosts.
+
+# Install
+
+Copy the ecog.py file
 
 # Commands
 
@@ -10,7 +14,6 @@ This is a python client that talks with [ecogwiki](http://ecogwiki.com/). It cou
 * cat PAGE_TITLE  - print content of title, in markdown format
 * edit PAGE_TITLE - open default `EDITOR` to edit and save page
 * memo            - short, useful daily memo ;)
-
 
 # Usage
 
@@ -145,10 +148,9 @@ You may give a default text to begin with if you are creating a new page with `-
 
 # memo
 
-Just for convenience, `ecog` supports some easy-to-write memo system.
+Write a daily memo. `ecog` supports easy-to-write memo system.
 
-Everytime you fire `ecog memo`, it will open a page titled `memo/YYYY-mm-dd`, where the rear part is today's date.
-With this feature you can write a daily memo.
+Everytime you fire `ecog memo`, it will open a page titled `memo/YYYY-mm-dd` with today's date.
 
 	$ ecog memo -h
 	usage: ecog memo [-h] [--comment TEXT]
@@ -156,5 +158,8 @@ With this feature you can write a daily memo.
 	optional arguments:
 	  -h, --help      show this help message and exit
 	  --comment TEXT  edit comment message
+
+
+NOTE this is shorthand for `ecog edit memo/YYYY-mm-dd`.
 
 

@@ -19,7 +19,9 @@ from urllib2 import HTTPError
 import oauth2 as oauth
 import feedparser
 
-CWD = os.path.dirname(os.path.realpath(__file__))
+#CWD  = os.path.dirname(os.path.realpath(__file__))
+CWD = os.path.join(os.path.expanduser('~'), '.ecog')
+
 
 client_id     = '576416393937-rmcaesbkv0rfdcq71l5ol9p3sbmv1qf9.apps.googleusercontent.com'
 client_secret = 'f_7_soOcc_SZhlDzLfUB0d-t'
@@ -28,18 +30,21 @@ consumer = oauth.Consumer(client_id, client_secret)
 # system editor
 editor = os.environ.get('EDITOR', 'vi')
 
+# logging
+LOG_DIR = os.path.join(CWD, 'log')
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
 formatter = logging.Formatter(fmt="%(asctime)s %(levelname)s %(message)s", datefmt='[%H:%M:%S]')
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-info_handler = logging.FileHandler(os.path.join(CWD, 'log', 'info.log'))
+info_handler = logging.FileHandler(os.path.join(LOG_DIR, 'info.log'))
 info_handler.setLevel(logging.INFO)
 
-debug_handler = logging.FileHandler(os.path.join(CWD, 'log', 'debug.log'))
+debug_handler = logging.FileHandler(os.path.join(LOG_DIR, 'debug.log'))
 debug_handler.setLevel(logging.DEBUG)
 
-error_handler = logging.FileHandler(os.path.join(CWD, 'log', 'error.log'))
+error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
