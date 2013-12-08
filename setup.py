@@ -13,7 +13,7 @@ from setuptools import setup
 
 
 setup(name='ecog',
-    version='0.7.21',
+    version='0.7.22',
     author = 'Janghwan Kim',
     author_email = 'janghwan@gmail.com',
     description = 'Ecogwiki OAuth client',

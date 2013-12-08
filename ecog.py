@@ -19,7 +19,7 @@ from urllib2 import HTTPError
 import oauth2 as oauth
 import feedparser
 
-__version__ = '0.7.21'
+__version__ = '0.7.22'
 
 #CWD  = os.path.dirname(os.path.realpath(__file__))
 CWD = os.path.join(os.path.expanduser('~'), '.ecog')
