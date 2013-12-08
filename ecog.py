@@ -49,7 +49,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-#logger.addHandler(debug_handler)
+logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 
@@ -320,7 +320,7 @@ class EcogWiki(object):
         try:
             resp, content = self._request(url, format='json', method='POST', body=data)
             content = json.loads(content)
-            return content
+            return resp, content
         except HTTPError as e:
             logger.error("[post] %d %s", e.code, e.msg)
             raise
@@ -497,6 +497,93 @@ if __name__ == '__main__':
     #
     # Commands
     #
+    @try_auth_on_forbidden(ecog)
+    def edit_command(title, r0_template, comment):
+        ''' open editor and send post after save 
+
+        1. [GET] get page metadata and save temp file
+        2. [GET] get page rawdata with revision and save temp file
+        3. open tempfile with rawbody, and let user edit
+        4. after edit is finished, confirm tempfile
+        5. ask for comment
+        6. [POST] post page with new content
+        7. remove temp files
+        '''
+        logger.info('[edit] %s', title)
+        if r0_template and not r0_template.endswith("\n"):
+            r0_template += "\n\n"
+
+        tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
+        logger.debug('[edit] temp directory: %s', tempdir)
+        try:
+            # 1. [GET] get page metadata
+            ecog_get   = try_auth_on_forbidden(ecog)(ecog.get)
+            jsondata   = ecog_get(title, format='json')
+            revision   = jsondata['revision']
+            safe_title = urllib.quote_plus(title)
+            fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
+            logger.debug('[edit] "%s" meta file: %s', title, temp_json)
+            try:
+                with open(temp_json, 'w') as f:
+                    json.dump(jsondata, f, indent=4)
+                # 2. [GET] get page rawdata
+                rawbody = ecog_get(title, format='rawbody', revision=revision)
+                fd, temp_rawbody = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
+                logger.debug('[edit] "%s" rawbody file: %s', title, temp_rawbody)
+                with open(temp_rawbody, 'w') as f:
+                    if revision > 0:
+                        f.write(rawbody)
+                    elif r0_template:
+                        f.write(r0_template)
+                try:
+                    # 3. open temp file with editor
+                    ret = subprocess.call(editor.split() + [temp_rawbody])
+                    if ret != 0:
+                        output('editor %s failed with status %d, aborting.' % (editor, ret))
+                        return
+                    # 4. confirm content
+                    content = ''
+                    with open(temp_rawbody) as f:
+                        content = f.read()
+                    if (revision > 0 and content == rawbody) or (revision == 0 and content == r0_template):
+                        output('nothing new, aborting.')
+                        return
+                    if len(content) == 0:
+                        output('empty content, aborting.')
+                        return
+                    # 5. ask comment
+                    if not comment:
+                        comment = raw_input('comment message (default: written by ecogwiki client): ')
+                        comment = comment or 'post by ecogwiki client'
+                    # 6. [POST] post page with new content
+                    ecog_post = try_auth_on_forbidden(ecog)(ecog.post)
+                    resp, result = ecog_post(title, content, revision=revision, comment=comment)
+                    logger.debug('[edit] %s', result)
+                    output('updated %s to revision %d: %s' % (title, int(result['revision']), resp['location']))
+
+                    # 7. remove temp file on success
+                    try:
+                        os.remove(temp_rawbody)
+                    except OSError as e:
+                        logger.error('[edit] failed removing temp rawbody file %s, %s', temp_rawbody, e)
+
+                    return result
+                except Exception as e:
+                    output('error during edit. temporary file is saved at: %s' % temp_rawbody)
+                    logger.error('[edit] %s', e)
+                    raise
+                finally:
+                    pass
+            finally:
+                try:
+                    os.remove(temp_json)
+                except OSError as e:
+                    logger.error('[edit] failed removing temp json file %s (%s)', temp_json, e)
+        finally:
+            try:
+                os.removedirs(tempdir)
+            except OSError as e:
+                logger.error('[edit] failed removing temp directory %s, %s', tempdir, e)
 
     # list
     if args.command == 'list':
@@ -617,94 +704,6 @@ if __name__ == '__main__':
 
     # edit
     elif args.command == 'edit':
-        @try_auth_on_forbidden(ecog)
-        def edit_command(title, r0_template, comment):
-            ''' open editor and send post after save 
-
-            1. [GET] get page metadata and save temp file
-            2. [GET] get page rawdata with revision and save temp file
-            3. open tempfile with rawbody, and let user edit
-            4. after edit is finished, confirm tempfile
-            5. ask for comment
-            6. [POST] post page with new content
-            7. remove temp files
-            '''
-            logger.info('[edit] %s', title)
-            if r0_template and not r0_template.endswith("\n"):
-                r0_template += "\n\n"
-
-            tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
-            logger.debug('[edit] temp directory: %s', tempdir)
-            try:
-                # 1. [GET] get page metadata
-                ecog_get   = try_auth_on_forbidden(ecog)(ecog.get)
-                jsondata   = ecog_get(title, format='json')
-                revision   = jsondata['revision']
-                safe_title = urllib.quote_plus(title)
-                fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
-                logger.debug('[edit] "%s" meta file: %s', title, temp_json)
-                try:
-                    with open(temp_json, 'w') as f:
-                        json.dump(jsondata, f, indent=4)
-                    # 2. [GET] get page rawdata
-                    rawbody = ecog_get(title, format='rawbody', revision=revision)
-                    fd, temp_rawbody = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
-                    logger.debug('[edit] "%s" rawbody file: %s', title, temp_rawbody)
-                    with open(temp_rawbody, 'w') as f:
-                        if revision > 0:
-                            f.write(rawbody)
-                        elif r0_template:
-                            f.write(r0_template)
-                    try:
-                        # 3. open temp file with editor
-                        ret = subprocess.call(editor.split() + [temp_rawbody])
-                        if ret != 0:
-                            output('editor %s failed with status %d, aborting.' % (editor, ret))
-                            return
-                        # 4. confirm content
-                        content = ''
-                        with open(temp_rawbody) as f:
-                            content = f.read()
-                        if (revision > 0 and content == rawbody) or (revision == 0 and content == r0_template):
-                            output('nothing new, aborting.')
-                            return
-                        if len(content) == 0:
-                            output('empty content, aborting.')
-                            return
-                        # 5. ask comment
-                        if not comment:
-                            comment = raw_input('comment message (default: written by ecogwiki client): ')
-                            comment = comment or 'post by ecogwiki client'
-                        # 6. [POST] post page with new content
-                        ecog_post = try_auth_on_forbidden(ecog)(ecog.post)
-                        result = ecog_post(title, content, revision=revision, comment=comment)
-                        logger.debug('[edit] %s', result)
-                        output('updated %s to revision %d' % (title, int(result['revision'])))
-
-                        # 7. remove temp file on success
-                        try:
-                            os.remove(temp_rawbody)
-                        except OSError as e:
-                            logger.error('[edit] failed removing temp rawbody file %s, %s', temp_rawbody, e)
-
-                        return result
-                    except Exception as e:
-                        output('error during edit. temporary file is saved at: %s' % temp_rawbody)
-                        logger.error('[edit] %s', e)
-                        raise
-                    finally:
-                        pass
-                finally:
-                    try:
-                        os.remove(temp_json)
-                    except OSError as e:
-                        logger.error('[edit] failed removing temp json file %s (%s)', temp_json, e)
-            finally:
-                try:
-                    os.removedirs(tempdir)
-                except OSError as e:
-                    logger.error('[edit] failed removing temp directory %s, %s', tempdir, e)
-
         try:
             edit_command(title=args.title, r0_template=args.template, comment=args.comment)
         except HTTPError as e:
@@ -725,7 +724,7 @@ if __name__ == '__main__':
         @try_auth_on_forbidden(ecog)
         def memo_command(comment):
             title = 'memo/%s' % now.strftime("%y-%m-%d")
-            ecog.edit(title=title, r0_template='.write janghwan@gmail.com\n', comment=comment)
+            edit_command(title=title, r0_template='', comment=comment)
 
         try:
             memo_command(comment=args.comment)
