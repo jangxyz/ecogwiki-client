@@ -52,7 +52,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-logger.addHandler(debug_handler)
+#logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 
