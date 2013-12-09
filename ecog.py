@@ -749,7 +749,7 @@ if __name__ == '__main__':
     # memo
     elif args.command == 'memo':
         try:
-            title = 'memo/%s' % now.strftime("%y-%m-%d")
+            title = 'memo/%s' % now.strftime("%Y-%m-%d")
             edit_command(title=title, r0_template='', comment=args.comment)
         except HTTPError as e:
             logger.error(traceback.format_exc())
