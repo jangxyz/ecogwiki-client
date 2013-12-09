@@ -436,7 +436,8 @@ if __name__ == '__main__':
     #
     # Application Helpers
     #
-    now = datetime.datetime.now()
+    now_utc = datetime.datetime.now(dateutil.tz.tzutc())
+    now     = now_utc.astimezone(dateutil.tz.tzlocal())
 
     def output(*args, **kwargs):
         ''' print output to screen, using the default filesystem encoding
@@ -494,14 +495,16 @@ if __name__ == '__main__':
             return run
         return command_runner
 
-    def updated_datetime(entry):
-        timestamp = int(time.strftime("%s", entry.updated_parsed))
-        return datetime.datetime.fromtimestamp(timestamp)
-    def format_updated_datetime(dt):
-        if now - dt <= datetime.timedelta(days=180):
-            updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
+    def format_updated_datetime(entry, now=None):
+        now_utc = now or datetime.datetime.now(dateutil.tz.tzutc())
+
+        updated_utc = dateutil.parser.parse(entry.updated)   # parse ISO format
+        dt = updated_utc.astimezone(dateutil.tz.tzlocal())   # convert to local timezone
+
+        if now_utc - dt <= datetime.timedelta(days=180):
+            updated_time = dt.strftime("%m %d %H:%M")
         else:
-            updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
+            updated_time = dt.strftime("%m %d  %Y")
         return updated_time
 
     #
@@ -618,10 +621,9 @@ if __name__ == '__main__':
             entries = ecog.list().entries
             max_author_width = max(len(e.author) for e in entries)
             for entry in entries:
-                dt = updated_datetime(entry)
                 output("%s  %s  %s" % (
                     entry.author.ljust(max_author_width), 
-                    format_updated_datetime(dt),
+                    format_updated_datetime(entry, now_utc),
                     entry.title
                 ))
         except KeyboardInterrupt:
@@ -646,11 +648,10 @@ if __name__ == '__main__':
             max_size_width   = len(str(max(summary_sizes)))
 
             for i,entry in enumerate(entries):
-                dt = updated_datetime(entry)
                 output("%s  %s  %s  %s" % (
                     entry.author.ljust(max_author_width), 
                     str(summary_size(entry)).rjust(max_size_width), 
-                    format_updated_datetime(dt),
+                    format_updated_datetime(entry, now_utc),
                     entry.title
                 ))
             output()
@@ -749,7 +750,7 @@ if __name__ == '__main__':
     # memo
     elif args.command == 'memo':
         try:
-            title = 'memo/%s' % now.strftime("%Y-%m-%d")
+            title = 'memo/%s' % now_utc.strftime("%Y-%m-%d")
             edit_command(title=title, r0_template='', comment=args.comment)
         except HTTPError as e:
             logger.error(traceback.format_exc())
