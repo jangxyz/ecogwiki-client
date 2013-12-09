@@ -22,7 +22,7 @@ import oauth2 as oauth
 import feedparser
 import dateutil.parser
 
-__version__ = '0.7.23'
+__version__ = '0.7.24'
 
 #CWD  = os.path.dirname(os.path.realpath(__file__))
 CWD = os.path.join(os.path.expanduser('~'), '.ecog')
@@ -269,19 +269,25 @@ class EcogWiki(object):
         self.client = oauth.Client(consumer, access_token)
 
     def _request(self, url, method='GET', format=None, body='', headers=None):
+        # url
         params = {
             'oauth_version': '2.0',
         }
         if format:
             params['_type'] = format
-
         url = to_url(url, params)
         logger.debug('[_request] %s %s', method, url)
-        #pprint ('params:', req._split_url_string(urlparse.urlparse(uri)[4]))
         if body:
             logger.debug('[_request] body: %s', body)
-        #
-        resp, content = self.client.request(url, method, body=body)
+
+        # headers
+        if not isinstance(headers, dict):
+            headers = {}
+        if method in ("POST", "PUT"):
+            headers.setdefault('Content-Type', 'application/x-www-form-urlencoded')
+
+        # do the request
+        resp, content = self.client.request(url, method, body=body, headers=headers)
         logger.debug('[_request] response: %s', resp)
         logger.debug('[_request] content: %s', content)
         if resp['status'] != '200':
@@ -321,7 +327,7 @@ class EcogWiki(object):
             'comment': comment or 'post by ecogwiki client',
         })
         try:
-            resp, content = self._request(url, format='json', method='POST', body=data)
+            resp, content = self._request(url, format='json', method='PUT', body=data)
             content = json.loads(content)
             return resp, content
         except HTTPError as e:
@@ -580,7 +586,7 @@ if __name__ == '__main__':
                     ecog_post = try_auth_on_forbidden(ecog)(ecog.post)
                     resp, result = ecog_post(title, content, revision=revision, comment=comment)
                     logger.debug('[edit] %s', result)
-                    output('updated %s to revision %d: %s' % (title, int(result['revision']), resp['location']))
+                    output('updated "%s" to revision %d: %s' % (title, int(result['revision']), resp['location']))
 
                     # 7. remove temp file on success
                     try:
@@ -679,7 +685,7 @@ if __name__ == '__main__':
                 content = collections.OrderedDict(sorted(content.items(), key=lambda (k,v): key_order.index(k)))
 
                 # trim body
-                if content['body'] > 62: # 79 - 4(indent) - 6("body") - 2(: ) - 2("") - 3(...)
+                if len(content['body']) > 62: # 79 - 4(indent) - 6("body") - 2(: ) - 2("") - 3(...)
                     content['body'] = content['body'][:62] + '...'
 
                 output(json.dumps(content, indent=4))
