@@ -11,10 +11,9 @@
 
 from setuptools import setup
 
-
 setup(name='ecog',
-    version='0.7.22',
-    author = 'Janghwan Kim',
+    version='0.7.23',
+    author = 'Jang-hwan Kim',
     author_email = 'janghwan@gmail.com',
     description = 'Ecogwiki OAuth client',
     long_description = __doc__,
@@ -22,6 +21,24 @@ setup(name='ecog',
 
     py_modules = ['ecog'],
     scripts = ['ecog'],
-    install_requires = ['oauth2', 'feedparser'],
+    install_requires = ['oauth2', 'feedparser', 'dateutil'],
+
+    license = 'MIT License',
+    platforms = ['POSIX'],
+    keywords = ['oauth', 'markdown'],
+    classifiers = [line.strip() for line in '''
+        Development Status :: 3 - Alpha
+        Environment :: Console
+        Intended Audience :: Developers
+        Intended Audience :: End Users/Desktop
+        License :: OSI Approved :: MIT License
+        Natural Language :: English
+        Operating System :: POSIX
+        Programming Language :: Python :: 2.7
+        Topic :: Communications
+        Topic :: Terminals
+        Topic :: Text Processing
+        Topic :: Utilities
+    '''.strip().splitlines()]
 )
 

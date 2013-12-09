@@ -3,7 +3,7 @@
 
 # Install
 
-You only need the `ecog.py` file, with two dependencies: `oauth2`, `feedparser`
+You only need the `ecog.py` file, with two dependencies: `oauth2`, `feedparser`, `dateutil`
 
 Requires python 2.7 or higher.
 
@@ -12,23 +12,29 @@ Requires python 2.7 or higher.
 
 	pip install ecog
 
-A runnable `ecog` executable is installed to use right away.
+This will install `ecog` package together with its dependencies. An runnable `ecog` program is also installed for easy use.
 
 
 ## Manual Install
 
-Download the `ecog.py` file and start using it.
+Download the `ecog.py` file and start using it. Don't forget to install `oauth2`, `feedparser` and `dateutil`.
 
 
 # Getting Started
 
-try the following commands:
+Try the following commands:
 
 `ecog list`
 
 `ecog cat Home`
 
 `ecog edit Home`
+
+will act on default host, www.ecogwiki.com .
+
+If you have your own host, you can do it on your host:
+
+	ecog --host ecogwiki-jangxyz.appspot.com cat 'ecogwiki client'
 
 
 ## Commands List

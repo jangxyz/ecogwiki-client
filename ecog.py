@@ -14,12 +14,15 @@ import urllib
 import subprocess
 import logging
 import traceback
+import difflib
+import shutil
 from urllib2 import HTTPError
 
 import oauth2 as oauth
 import feedparser
+import dateutil.parser
 
-__version__ = '0.7.22'
+__version__ = '0.7.23'
 
 #CWD  = os.path.dirname(os.path.realpath(__file__))
 CWD = os.path.join(os.path.expanduser('~'), '.ecog')
@@ -444,7 +447,8 @@ if __name__ == '__main__':
                 out.write(sep)
             arg = arg.encode(encoding) if isinstance(arg, unicode) else str(arg)
             out.write(arg)
-        out.write(end)
+        if end:
+            out.write(end)
 
     def require_authorization(consumer, host):
         access_token = oauth_dance(consumer, host)
@@ -520,6 +524,11 @@ if __name__ == '__main__':
             ecog_get   = try_auth_on_forbidden(ecog)(ecog.get)
             jsondata   = ecog_get(title, format='json')
             revision   = jsondata['revision']
+
+            updated_at_str = jsondata['updated_at']
+            updated_at_utc = dateutil.parser.parse(updated_at_str)              # parse ISO format
+            updated_at     = updated_at_utc.astimezone(dateutil.tz.tzlocal())   # convert to local timezone
+
             safe_title = urllib.quote_plus(title)
             fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
             logger.debug('[edit] "%s" meta file: %s', title, temp_json)
@@ -528,13 +537,18 @@ if __name__ == '__main__':
                     json.dump(jsondata, f, indent=4)
                 # 2. [GET] get page rawdata
                 rawbody = ecog_get(title, format='rawbody', revision=revision)
-                fd, temp_rawbody = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
-                logger.debug('[edit] "%s" rawbody file: %s', title, temp_rawbody)
-                with open(temp_rawbody, 'w') as f:
+                fd, temp_rawbody0 = tempfile.mkstemp(dir=tempdir, prefix='%s.r%d-' % (safe_title, revision), suffix='.markdown')
+                logger.debug('[edit] "%s" rawbody file: %s', title, temp_rawbody0)
+                with open(temp_rawbody0, 'w') as f:
                     if revision > 0:
                         f.write(rawbody)
                     elif r0_template:
                         f.write(r0_template)
+                # copy
+                temp_rawbody = os.path.splitext(temp_rawbody0)
+                temp_rawbody = temp_rawbody[0] + '.edit' + temp_rawbody[1]
+                shutil.copy(temp_rawbody0, temp_rawbody)
+                logger.debug('[edit] copy %s => %s', temp_rawbody0, temp_rawbody)
                 try:
                     # 3. open temp file with editor
                     ret = subprocess.call(editor.split() + [temp_rawbody])
@@ -553,6 +567,13 @@ if __name__ == '__main__':
                         return
                     # 5. ask comment
                     if not comment:
+                        diff = difflib.unified_diff(rawbody.splitlines(True),content.splitlines(True), n=0,
+                                fromfile='%s (rev %d)' % (title, revision),
+                                fromfiledate=updated_at.strftime("%Y/%m/%d %H-%M"),
+                                tofile='EDIT', 
+                        )
+                        for line in diff:
+                            output(line, end='')
                         comment = raw_input('comment message (default: written by ecogwiki client): ')
                         comment = comment or 'post by ecogwiki client'
                     # 6. [POST] post page with new content
@@ -721,13 +742,9 @@ if __name__ == '__main__':
 
     # memo
     elif args.command == 'memo':
-        @try_auth_on_forbidden(ecog)
-        def memo_command(comment):
-            title = 'memo/%s' % now.strftime("%y-%m-%d")
-            edit_command(title=title, r0_template='', comment=comment)
-
         try:
-            memo_command(comment=args.comment)
+            title = 'memo/%s' % now.strftime("%y-%m-%d")
+            edit_command(title=title, r0_template='', comment=args.comment)
         except HTTPError as e:
             logger.error(traceback.format_exc())
             output(e.code, e.msg)
