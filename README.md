@@ -3,7 +3,7 @@
 
 # Install
 
-You only need the `ecog.py` file, with dependencies: `oauth2`, `feedparser`, `dateutil`
+You only need the `ecog.py` file, with dependencies: `oauth2`, `feedparser`, `python-dateutil`
 
 Requires python 2.7 or higher.
 
@@ -17,7 +17,7 @@ This will install `ecog` package together with its dependencies. An runnable `ec
 
 ## Manual Install
 
-Download the `ecog.py` file and start using it. Don't forget to install `oauth2`, `feedparser` and `dateutil`.
+Download the `ecog.py` file and start using it. Don't forget to install `oauth2`, `feedparser` and `python-dateutil`.
 
 
 # Getting Started

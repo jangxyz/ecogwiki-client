@@ -12,7 +12,7 @@
 from setuptools import setup
 
 setup(name='ecog',
-    version='0.7.24.3',
+    version='0.7.24.4',
     author = 'Jang-hwan Kim',
     author_email = 'janghwan@gmail.com',
     description = 'Ecogwiki OAuth client',
@@ -21,7 +21,7 @@ setup(name='ecog',
 
     py_modules = ['ecog'],
     scripts = ['ecog'],
-    install_requires = ['oauth2', 'feedparser', 'dateutil'],
+    install_requires = ['oauth2', 'feedparser', 'python-dateutil'],
 
     license = 'MIT License',
     platforms = ['POSIX'],
