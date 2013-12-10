@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/local/opt/python/bin/python2.7
 
 import os
 import sys
@@ -52,7 +52,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-#logger.addHandler(debug_handler)
+logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 
@@ -269,22 +269,25 @@ class EcogWiki(object):
         self.client = oauth.Client(consumer, access_token)
 
     def _request(self, url, method='GET', format=None, body='', headers=None):
-        # url
+        # params
         params = {
             'oauth_version': '2.0',
         }
         if format:
             params['_type'] = format
+
+        # headers
+        headers = {} if not isinstance(headers, dict) else headers
+        if method in ("POST", "PUT"):
+            headers.setdefault('Content-Type', 'application/x-www-form-urlencoded')
+        if method in ("PUT", "DELETE"):
+            params['_method'] = method
+
+        # url
         url = to_url(url, params)
         logger.debug('[_request] %s %s', method, url)
         if body:
             logger.debug('[_request] body: %s', body)
-
-        # headers
-        if not isinstance(headers, dict):
-            headers = {}
-        if method in ("POST", "PUT"):
-            headers.setdefault('Content-Type', 'application/x-www-form-urlencoded')
 
         # do the request
         resp, content = self.client.request(url, method, body=body, headers=headers)
@@ -328,7 +331,10 @@ class EcogWiki(object):
         })
         try:
             resp, content = self._request(url, format='json', method='PUT', body=data)
-            content = json.loads(content)
+            try:
+                content = json.loads(content)
+            except Exception as e:
+                logger.error('[post] json load error: %s', e)
             return resp, content
         except HTTPError as e:
             logger.error("[post] %d %s", e.code, e.msg)
@@ -436,8 +442,7 @@ if __name__ == '__main__':
     #
     # Application Helpers
     #
-    now_utc = datetime.datetime.now(dateutil.tz.tzutc())
-    now     = now_utc.astimezone(dateutil.tz.tzlocal())
+    now = datetime.datetime.now()
 
     def output(*args, **kwargs):
         ''' print output to screen, using the default filesystem encoding
@@ -495,16 +500,14 @@ if __name__ == '__main__':
             return run
         return command_runner
 
-    def format_updated_datetime(entry, now=None):
-        now_utc = now or datetime.datetime.now(dateutil.tz.tzutc())
-
-        updated_utc = dateutil.parser.parse(entry.updated)   # parse ISO format
-        dt = updated_utc.astimezone(dateutil.tz.tzlocal())   # convert to local timezone
-
-        if now_utc - dt <= datetime.timedelta(days=180):
-            updated_time = dt.strftime("%m %d %H:%M")
+    def updated_datetime(entry):
+        timestamp = int(time.strftime("%s", entry.updated_parsed))
+        return datetime.datetime.fromtimestamp(timestamp)
+    def format_updated_datetime(dt):
+        if now - dt <= datetime.timedelta(days=180):
+            updated_time = time.strftime("%m %d %H:%M", entry.updated_parsed)
         else:
-            updated_time = dt.strftime("%m %d  %Y")
+            updated_time = time.strftime("%m %d  %Y", entry.updated_parsed)
         return updated_time
 
     #
@@ -534,9 +537,11 @@ if __name__ == '__main__':
             jsondata   = ecog_get(title, format='json')
             revision   = jsondata['revision']
 
-            updated_at_str = jsondata['updated_at']
-            updated_at_utc = dateutil.parser.parse(updated_at_str)              # parse ISO format
-            updated_at     = updated_at_utc.astimezone(dateutil.tz.tzlocal())   # convert to local timezone
+            updated_at = None
+            if jsondata['updated_at']:
+                updated_at_str = jsondata['updated_at']
+                updated_at_utc = dateutil.parser.parse(updated_at_str)              # parse ISO format
+                updated_at     = updated_at_utc.astimezone(dateutil.tz.tzlocal())   # convert to local timezone
 
             safe_title = urllib.quote_plus(title)
             fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
@@ -576,11 +581,15 @@ if __name__ == '__main__':
                         return
                     # 5. ask comment
                     if not comment:
-                        diff = difflib.unified_diff(rawbody.splitlines(True),content.splitlines(True), n=0,
-                                fromfile='%s (rev %d)' % (title, revision),
-                                fromfiledate=updated_at.strftime("%Y/%m/%d %H-%M"),
-                                tofile='EDIT', 
-                        )
+                        options = {
+                            'n': 0,
+                            'fromfile': '%s (rev %d)' % (title, revision),
+                            'tofile': 'EDIT', 
+                        }
+                        if updated_at:
+                            options['fromfiledate'] = updated_at.strftime("%Y/%m/%d %H-%M")
+
+                        diff = difflib.unified_diff(rawbody.splitlines(True),content.splitlines(True), **options)
                         for line in diff:
                             output(line, end='')
                         comment = raw_input('comment message (default: written by ecogwiki client): ')
@@ -589,13 +598,22 @@ if __name__ == '__main__':
                     ecog_post = try_auth_on_forbidden(ecog)(ecog.post)
                     resp, result = ecog_post(title, content, revision=revision, comment=comment)
                     logger.debug('[edit] %s', result)
-                    output('updated "%s" to revision %d: %s' % (title, int(result['revision']), resp['location']))
+                    #output('updated "%s" to revision %d: %s' % (title, int(new_revision), resp['location']))
+                    ## 6.1 [GET] check page back
+                    new_revision = ecog_get(title, format='json')['revision']
+                    output('updated "%s" to revision %d' % (title, int(new_revision)))
 
                     # 7. remove temp file on success
                     try:
                         os.remove(temp_rawbody)
+                        logger.debug('[edit] removed %s', temp_rawbody)
                     except OSError as e:
                         logger.error('[edit] failed removing temp rawbody file %s, %s', temp_rawbody, e)
+                    try:
+                        os.remove(temp_rawbody0)
+                        logger.debug('[edit] removed %s', temp_rawbody0)
+                    except OSError as e:
+                        logger.error('[edit] failed removing temp rawbody file %s, %s', temp_rawbody0, e)
 
                     return result
                 except Exception as e:
@@ -607,11 +625,13 @@ if __name__ == '__main__':
             finally:
                 try:
                     os.remove(temp_json)
+                    logger.debug('[edit] removed %s', temp_json)
                 except OSError as e:
                     logger.error('[edit] failed removing temp json file %s (%s)', temp_json, e)
         finally:
             try:
                 os.removedirs(tempdir)
+                logger.debug('[edit] removed %s', tempdir)
             except OSError as e:
                 logger.error('[edit] failed removing temp directory %s, %s', tempdir, e)
 
@@ -621,9 +641,10 @@ if __name__ == '__main__':
             entries = ecog.list().entries
             max_author_width = max(len(e.author) for e in entries)
             for entry in entries:
+                dt = updated_datetime(entry)
                 output("%s  %s  %s" % (
                     entry.author.ljust(max_author_width), 
-                    format_updated_datetime(entry, now_utc),
+                    format_updated_datetime(dt),
                     entry.title
                 ))
         except KeyboardInterrupt:
@@ -648,10 +669,11 @@ if __name__ == '__main__':
             max_size_width   = len(str(max(summary_sizes)))
 
             for i,entry in enumerate(entries):
+                dt = updated_datetime(entry)
                 output("%s  %s  %s  %s" % (
                     entry.author.ljust(max_author_width), 
                     str(summary_size(entry)).rjust(max_size_width), 
-                    format_updated_datetime(entry, now_utc),
+                    format_updated_datetime(dt),
                     entry.title
                 ))
             output()
@@ -750,7 +772,7 @@ if __name__ == '__main__':
     # memo
     elif args.command == 'memo':
         try:
-            title = 'memo/%s' % now_utc.strftime("%Y-%m-%d")
+            title = 'memo/%s' % now.strftime("%Y-%m-%d")
             edit_command(title=title, r0_template='', comment=args.comment)
         except HTTPError as e:
             logger.error(traceback.format_exc())
