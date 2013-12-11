@@ -52,7 +52,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-#logger.addHandler(debug_handler)
+logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 
@@ -395,7 +395,7 @@ def parse_args():
                        help='auth file storing access token')
     parser.add_argument('--host', metavar='HOST', dest='ecoghost', default='www.ecogwiki.com',
                        help='ecogwiki server host')
-    parser.add_argument('--version',  action='version', version='%(prog)s ' + __version__)
+    parser.add_argument('--version',  action='version', version='%(prog)s ' + __version__, default=None)
 
     subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', help='ecogwiki commands')
     cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
