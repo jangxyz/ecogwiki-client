@@ -22,7 +22,7 @@ import oauth2 as oauth
 import feedparser
 import dateutil.parser
 
-__version__ = '0.7.24'
+__version__ = '0.7.25'
 
 #CWD  = os.path.dirname(os.path.realpath(__file__))
 CWD = os.path.join(os.path.expanduser('~'), '.ecog')
@@ -52,7 +52,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-logger.addHandler(debug_handler)
+#logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 
@@ -390,11 +390,12 @@ class EcogWiki(object):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Ecogwiki client', epilog='Information in your fingertips.')
+    parser = argparse.ArgumentParser(prog='ecog', description='Ecogwiki client', epilog='Information in your fingertips.')
     parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
                        help='auth file storing access token')
     parser.add_argument('--host', metavar='HOST', dest='ecoghost', default='www.ecogwiki.com',
                        help='ecogwiki server host')
+    parser.add_argument('--version',  action='version', version='%(prog)s ' + __version__)
 
     subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', help='ecogwiki commands')
     cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
@@ -419,6 +420,10 @@ def parse_args():
     args = parser.parse_args()
     if '://' not in args.ecoghost:
         args.ecoghost = 'http://' + args.ecoghost
+
+    if args.version:
+        output(__version__)
+        sys.exit(0)
 
     return args
 
