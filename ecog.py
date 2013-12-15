@@ -22,7 +22,7 @@ import oauth2 as oauth
 import feedparser
 import dateutil.parser
 
-__version__ = '0.7.25'
+__version__ = '0.7.25.1'
 
 #CWD  = os.path.dirname(os.path.realpath(__file__))
 CWD = os.path.join(os.path.expanduser('~'), '.ecog')
@@ -52,7 +52,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-logger.addHandler(debug_handler)
+#logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 
@@ -290,7 +290,7 @@ class EcogWiki(object):
             logger.debug('[_request] body: %s', body)
 
         # do the request
-        resp, content = self.client.request(url, method, body=body, headers=headers)
+        resp, content = self.client.request(url, method=method, body=body, headers=headers)
         logger.debug('[_request] response: %s', resp)
         logger.debug('[_request] content: %s', content)
         if resp['status'] != '200':
@@ -308,19 +308,19 @@ class EcogWiki(object):
             url += '?rev=' + str(revision)
         # request
         try:
-            resp, content = self._request(url, format=format)
+            resp, content = self._request(url, method='GET', format=format)
         except HTTPError as e:
             logger.error("[get] %d %s", e.code, e.msg)
             raise
 
         if format == 'json':
             content = json.loads(content)
-        return content
+        return resp, content
 
     def post(self, title, body, revision=None, comment=''):
-        logger.info('[post] %s size: %d revision:%d comment:%s', title, len(body), int(revision), comment)
+        logger.info('[post] %s size: %d revision:%s comment:%s', title, len(body), revision, comment)
         if revision is None:
-            data = self.get(title)
+            _resp,data = self.get(title)
             revision = data['revision']
         url = urllib.basejoin(self.baseurl, title)
         data = urllib.urlencode({
@@ -538,9 +538,9 @@ if __name__ == '__main__':
         logger.debug('[edit] temp directory: %s', tempdir)
         try:
             # 1. [GET] get page metadata
-            ecog_get   = try_auth_on_forbidden(ecog)(ecog.get)
-            jsondata   = ecog_get(title, format='json')
-            revision   = jsondata['revision']
+            ecog_get       = try_auth_on_forbidden(ecog)(ecog.get)
+            _resp,jsondata = ecog_get(title, format='json')
+            revision       = jsondata['revision']
 
             updated_at = None
             if jsondata['updated_at']:
@@ -705,7 +705,7 @@ if __name__ == '__main__':
             if format == 'markdown': format = 'rawbody'
 
             #
-            content = ecog.get(title=title, revision=revision, format=format)
+            _resp,content = ecog.get(title=title, revision=revision, format=format)
 
             if format == 'json':
                 # sort by specific key order
@@ -739,7 +739,7 @@ if __name__ == '__main__':
     elif args.command == 'cat':
         @try_auth_on_forbidden(ecog)
         def cat_command(title, revision):
-            content = ecog.cat(title=title, revision=revision)
+            _resp,content = ecog.cat(title=title, revision=revision)
             output(content)
 
         try:
