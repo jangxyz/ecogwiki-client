@@ -1,14 +1,17 @@
 #!/usr/bin/python
 import unittest
+import mock
+
 import ecog
 
 '''
 
+    Test EcogWiki requests
+
+
 '''
 
 import urllib2
-
-import mock
 import oauth2 as oauth
 
 
@@ -195,7 +198,6 @@ class Ecog_cat(EcogTestCase):
             'status': '200',
             'content-type': 'application/json; charset=utf-8'
         })
-        #self.ecog._request.return_value = (self.response, '{}')
 
     def tearDown(self):
         super(Ecog_cat, self).tearDown()
@@ -207,12 +209,6 @@ class Ecog_cat(EcogTestCase):
         self.assertEqual(kwargs['format'], 'txt')
 
 
-class PUT_Request(unittest.TestCase):
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
 
 class DELETE_Request(unittest.TestCase):
     def setUp(self):

@@ -16,7 +16,7 @@ from setuptools import setup
 def read_version():
     import sys
     import importlib
-    sys.path.insert(0, 'src')
+    sys.path.insert(0, 'ecog')
     try:
         v = importlib.import_module('version')
         return v.__version__
@@ -31,9 +31,9 @@ setup(name='ecog',
     long_description = __doc__,
     url = 'https://github.com/jangxyz/ecogwiki-client',
 
-    package_dir = {'ecog': 'src'},
+    #package_dir = {'ecog': 'src'},
     packages = ['ecog'],
-    scripts = ['ecog'],
+    scripts = ['scripts/ecog'],
     install_requires = ['oauth2', 'feedparser', 'python-dateutil'],
 
     license = 'MIT License',
