@@ -6,20 +6,33 @@
 
     `ecog` is a python client that talks with [ecogwiki](http://www.ecogwiki.com/). It is configurable to talk with any other ecogwiki hosts.
 
+    See https://github.com/jangxyz/ecogwiki-client for details.
+
 
 """
 
 from setuptools import setup
 
+def read_version():
+    import sys
+    import importlib
+    sys.path.insert(0, 'src')
+    try:
+        v = importlib.import_module('version')
+        return v.__version__
+    finally:
+        sys.path.pop(0)
+
 setup(name='ecog',
-    version='0.7.25.1',
+    version=read_version(),
     author = 'Jang-hwan Kim',
     author_email = 'janghwan@gmail.com',
     description = 'Ecogwiki OAuth client',
     long_description = __doc__,
     url = 'https://github.com/jangxyz/ecogwiki-client',
 
-    py_modules = ['ecog'],
+    package_dir = {'ecog': 'src'},
+    packages = ['ecog'],
     scripts = ['ecog'],
     install_requires = ['oauth2', 'feedparser', 'python-dateutil'],
 

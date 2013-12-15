@@ -201,8 +201,8 @@ NOTE this is shorthand for `ecog edit memo/YYYY-mm-dd`.
 # TODO
 
 * user config files
-* print highlighted markdown
-* auto TAB-completion on titles
+* print highlighted markdown (+pygmentize)
+* auto TAB-completion on titles (bash-completion)
 * advanced commands like: `find`, `grep`
 * and much more to come..
 

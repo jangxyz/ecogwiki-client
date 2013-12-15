@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/opt/python/bin/python2.7
 
 from ecog import client
 client.main()

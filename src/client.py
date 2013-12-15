@@ -1,4 +1,4 @@
-#!/usr/local/opt/python/bin/python2.7
+#!/usr/bin/python
 
 import os
 import sys
@@ -16,15 +16,14 @@ import logging
 import traceback
 import difflib
 import shutil
-from urllib2 import HTTPError
 
 import oauth2 as oauth
-import feedparser
 import dateutil.parser
 
-__version__ = '0.7.25.1'
+from version import __version__
+from ecogwiki import EcogWiki
+from ecogwiki import HTTPError
 
-#CWD  = os.path.dirname(os.path.realpath(__file__))
 CWD = os.path.join(os.path.expanduser('~'), '.ecog')
 
 client_id     = '576416393937-rmcaesbkv0rfdcq71l5ol9p3sbmv1qf9.apps.googleusercontent.com'
@@ -86,6 +85,25 @@ def to_url(url, params={}):
     url = (scheme, netloc, path, params,
            urllib.urlencode(query, True), fragment)
     return urlparse.urlunparse(url)
+
+
+def output(*args, **kwargs):
+    ''' print output to screen, using the default filesystem encoding
+
+    output(*strings, sep=' ', end='\n', encoding=None, out=sys.stdout)
+
+    '''
+    sep      = kwargs.get('sep', ' ')
+    end      = kwargs.get('end', '\n')
+    encoding = kwargs.get('encoding', sys.getfilesystemencoding())
+    out = kwargs.get('out', sys.stdout)
+    for i,arg in enumerate(args):
+        if i > 0:
+            out.write(sep)
+        arg = arg.encode(encoding) if isinstance(arg, unicode) else str(arg)
+        out.write(arg)
+    if end:
+        out.write(end)
 
 
 #
@@ -187,217 +205,17 @@ def save_authfile(access_token, authfile):
 #
 #   End of OAuth phase
 #
-#access_token = oauth.Token(access_token_dict['oauth_token'], access_token_dict['oauth_token_secret'])
-
-
-def _request(consumer, access_token, url, method='GET', headers=None, body=None):
-    client = oauth.Client(consumer, access_token)
-    params = {
-        'oauth_version': '2.0',
-    }
-    url = to_url(url, params)
-    resp, content = client.request(url, method)
-    if resp['status'] != '200':
-        status = int(resp['status'])
-        msg    = httplib.responses.get(status, "Invalid response %d." % status)
-        logger.debug("[_request] Error: %d %s", status, msg)
-        raise HTTPError(url, status, msg, None, None)
-    return resp, content
-
-def get(consumer, access_token, url):
-    ''' GET request resource '''
-    client = oauth.Client(consumer, access_token)
-    params = {
-        'oauth_version': '2.0',
-    }
-    url = to_url(url, params)
-    resp, content = client.request(url, "GET")
-    if resp['status'] != '200':
-        status = int(resp['status'])
-        msg    = httplib.responses.get(status, "Invalid response %d." % status)
-        logger.error("[get] %d %s", status, msg)
-        raise HTTPError(url, status, msg, None, None)
-    output("Response Status Code: %s" % resp['status'])
-    output("Response body: %s" % content)
-
-    return content
-
-
-def post(consumer, access_token, url):
-    ''' POST resource '''
-    now = datetime.datetime.now()
-    url = 'http://ecogwiki-jangxyz.appspot.com/ecogwiki/client/sandbox/%s?_type=json' % now.strftime("%Y%m%d-%H%M")
-    client = oauth.Client(consumer, access_token)
-    params = {
-        'oauth_version': '2.0',
-    }
-
-    new_data = {
-        'body': 'new body at [[%s]]' % now.strftime("%Y%m%d-%H%M"),
-        'revision': 0,
-        'comment': '- by ecogwiki client'
-    }
-    url = to_url(url, params)
-    resp, content = client.request(url, "POST", 
-        body=urllib.urlencode(new_data))
-    if resp['status'] != '200':
-        status = int(resp['status'])
-        msg    = httplib.responses.get(status, "Invalid response %d." % status)
-        logger.error("[post] %d %s", status, msg)
-        raise HTTPError(url, status, msg, None, None)
-    output("Response Status Code: %s" % resp['status'])
-    output("Response body: %s" % content)
-
-    return content
-
-
-#
-#
-#
-
-class EcogWiki(object):
-    def __init__(self, baseurl, access_token=None):
-        self.baseurl = baseurl # http://ecogwiki-jangxyz.appspot.com
-        self.set_access_token(access_token)
-
-    @staticmethod
-    def _parse_feed(text):
-        return feedparser.parse(text)
-
-    def set_access_token(self, access_token):
-        self.access_token = access_token
-        self.client = oauth.Client(consumer, access_token)
-
-    def _request(self, url, method='GET', format=None, body='', headers=None):
-        # params
-        params = {
-            'oauth_version': '2.0',
-        }
-        if format:
-            params['_type'] = format
-
-        # headers
-        headers = {} if not isinstance(headers, dict) else headers
-        if method in ("POST", "PUT"):
-            headers.setdefault('Content-Type', 'application/x-www-form-urlencoded')
-        if method in ("PUT", "DELETE"):
-            params['_method'] = method
-
-        # url
-        url = to_url(url, params)
-        logger.debug('[_request] %s %s', method, url)
-        if body:
-            logger.debug('[_request] body: %s', body)
-
-        # do the request
-        resp, content = self.client.request(url, method=method, body=body, headers=headers)
-        logger.debug('[_request] response: %s', resp)
-        logger.debug('[_request] content: %s', content)
-        if resp['status'] != '200':
-            status = int(resp['status'])
-            msg    = httplib.responses.get(status, "Invalid response %d." % status)
-            logger.debug("[_request] Error: %d %s", status, msg)
-            raise HTTPError(url, status, msg, None, None)
-        return resp, content
-
-    def get(self, title, format='json', revision=None):
-        logger.info('[get] %s format:%s revision:%s', title, format, str(revision))
-        # form url
-        url = urllib.basejoin(self.baseurl, title)
-        if revision:
-            url += '?rev=' + str(revision)
-        # request
-        try:
-            resp, content = self._request(url, method='GET', format=format)
-        except HTTPError as e:
-            logger.error("[get] %d %s", e.code, e.msg)
-            raise
-
-        if format == 'json':
-            content = json.loads(content)
-        return resp, content
-
-    def post(self, title, body, revision=None, comment=''):
-        logger.info('[post] %s size: %d revision:%s comment:%s', title, len(body), revision, comment)
-        if revision is None:
-            _resp,data = self.get(title)
-            revision = data['revision']
-        url = urllib.basejoin(self.baseurl, title)
-        data = urllib.urlencode({
-            'title': title,
-            'body': body,
-            'revision': revision,
-            'comment': comment or 'post by ecogwiki client',
-        })
-        try:
-            resp, content = self._request(url, format='json', method='PUT', body=data)
-            try:
-                content = json.loads(content)
-            except Exception as e:
-                logger.error('[post] json load error: %s', e)
-            return resp, content
-        except HTTPError as e:
-            logger.error("[post] %d %s", e.code, e.msg)
-            raise
-
-    def list(self):
-        ''' shorthand for GET /sp.index?_type=atom '''
-        logger.info('[list] /sp.index?_type=atom')
-        url = urllib.basejoin(self.baseurl, 'sp.index')
-        try:
-            resp, content = self._request(url, format='atom')
-            return self._parse_feed(content)
-        except HTTPError as e:
-            logger.error("[list] %d %s", e.code, e.msg)
-            raise
-
-    def all(self):
-        ''' shorthand for GET /sp.titles?_type=json '''
-        logger.info('[all] /sp.titles?_type=json')
-        url = urllib.basejoin(self.baseurl, 'sp.titles')
-        try:
-            resp, content = self._request(url, format='json')
-            return json.loads(content)
-        except HTTPError as e:
-            logger.error("[all] %d %s", e.code, e.msg)
-            raise
-
-    def recent(self):
-        ''' shorthand for GET /sp.changes?_type=atom '''
-        logger.info('[recent] /sp.changes?_type=atom')
-        url = urllib.basejoin(self.baseurl, 'sp.changes')
-        try:
-            resp, content = self._request(url, format='atom')
-            return self._parse_feed(content)
-        except HTTPError as e:
-            logger.error("[recent] %d %s", e.code, e.msg)
-            raise
-
-    def cat(self, title, revision=None):
-        ''' shorthand for GET TITLE?_type=rawbody '''
-        logger.info('[cat] %s revision:%s', title, str(revision))
-        return self.get(title, format='rawbody', revision=revision)
-    
-    #def search(self, title):
-    #    pass
-
-    #def memo(self):
-    #    pass
-
-    #def render(self, body, open=False):
-    #    ''' render markdown text into HTML '''
-    #    pass
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(prog='ecog', description='Ecogwiki client', epilog='Information in your fingertips.')
+    parser = argparse.ArgumentParser(prog='ecog', description='Ecogwiki client - Information in your fingertips', epilog=' ')
     parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
                        help='auth file storing access token')
     parser.add_argument('--host', metavar='HOST', dest='ecoghost', default='www.ecogwiki.com',
                        help='ecogwiki server host')
     parser.add_argument('--version',  action='version', version='%(prog)s ' + __version__, default=None)
 
-    subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', help='ecogwiki commands')
+    subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', title='ecogwiki commands')
     cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
     get_parser    = subparsers.add_parser('get',    help='print page in json')
     list_parser   = subparsers.add_parser('list',   help="list pages info")
@@ -417,7 +235,10 @@ def parse_args():
     get_parser.add_argument('--format', metavar='FORMAT', help='one of [json|html|markdown|atom], json by default',
         choices=['json', 'rawbody', 'body', 'atom', 'markdown', 'html'], default='json')
 
+
+    #
     args = parser.parse_args()
+
     if '://' not in args.ecoghost:
         args.ecoghost = 'http://' + args.ecoghost
 
@@ -427,7 +248,7 @@ def parse_args():
 
     return args
 
-if __name__ == '__main__':
+def main():
     args = parse_args()
 
     # auth
@@ -448,24 +269,6 @@ if __name__ == '__main__':
     # Application Helpers
     #
     now = datetime.datetime.now()
-
-    def output(*args, **kwargs):
-        ''' print output to screen, using the default filesystem encoding
-
-        output(*strings, sep=' ', end='\n', encoding=None, out=sys.stdout)
-
-        '''
-        sep      = kwargs.get('sep', ' ')
-        end      = kwargs.get('end', '\n')
-        encoding = kwargs.get('encoding', sys.getfilesystemencoding())
-        out = kwargs.get('out', sys.stdout)
-        for i,arg in enumerate(args):
-            if i > 0:
-                out.write(sep)
-            arg = arg.encode(encoding) if isinstance(arg, unicode) else str(arg)
-            out.write(arg)
-        if end:
-            out.write(end)
 
     def require_authorization(consumer, host):
         access_token = oauth_dance(consumer, host)
@@ -792,3 +595,8 @@ if __name__ == '__main__':
             output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
             sys.exit(1)
 
+
+if __name__ == '__main__':
+    main()
+
+# vim: sts=4 et
