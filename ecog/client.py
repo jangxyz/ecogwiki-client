@@ -317,11 +317,17 @@ def exit_on_exception(f):
     def run(*args, **kwargs):
         try:
             f(*args, **kwargs)
-        except Exception as e:
+        except Exception:# as e:
             logger.error(traceback.format_exc())
             output('program halt. see %s for traceback' % os.path.join(CWD, 'log/error.log'))
             sys.exit(1)
     return run
+
+
+COMMANDS = []
+def command(f):
+    COMMANDS.append(f.func_name)
+    return f
 
 #
 #
@@ -336,6 +342,55 @@ class EcogClient(object):
         self.ecog = EcogWiki(ecoghost, self.access_token)
 
     @staticmethod
+    def parse_args():
+        parser = argparse.ArgumentParser(prog='ecog', description='Ecogwiki client - Information in your fingertips', epilog=' ')
+        parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
+                           help='auth file storing access token')
+        parser.add_argument('--host', metavar='HOST', dest='ecoghost', default='www.ecogwiki.com',
+                           help='ecogwiki server host')
+        parser.add_argument('--version',  action='version', version='%(prog)s ' + __version__, default=None)
+
+        subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', title='ecogwiki commands')
+        cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
+        get_parser    = subparsers.add_parser('get',    help='print page in json')
+        list_parser   = subparsers.add_parser('list',   help="list pages info")
+        title_parser  = subparsers.add_parser('title',  help='list all titles')
+        recent_parser = subparsers.add_parser('recent', help='list recent modified pages')
+        edit_parser   = subparsers.add_parser('edit',   help='edit page with editor', description='Edit page with your favorite editor ($EDITOR)')
+        append_parser = subparsers.add_parser('append', help='only append text',      description='Quickly append to page')
+        memo_parser   = subparsers.add_parser('memo',   help='quick memo',            description='Edit your daily memo')
+        
+        edit_parser.add_argument('title', metavar='TITLE', help='page title')
+        edit_parser.add_argument('--template', metavar='TEXT', help='text on new file', default=None)
+        edit_parser.add_argument('--comment',  metavar='MSG',  help='edit comment message', default='')
+        memo_parser.add_argument('--comment',  metavar='MSG',  help='edit comment message', default='')
+        get_parser.add_argument('title', metavar='TITLE', help='page title')
+        cat_parser.add_argument('title', metavar='TITLE', help='page title')
+        get_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
+        cat_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
+        get_parser.add_argument('--format', metavar='FORMAT', help='one of [json|html|markdown|atom], json by default',
+            choices=['json', 'txt', 'atom', 'markdown', 'html'], default='json')
+
+        append_parser.add_argument('title',           metavar='TITLE', help='page title')
+        append_parser.add_argument('body', nargs='?', metavar='TEXT',  help='body text. fires editor if not given', default='')
+        append_parser.add_argument('--comment',       metavar='MSG',   help='comment message', default='')
+
+        #
+        args = parser.parse_args()
+
+        if '://' not in args.ecoghost:
+            args.ecoghost = 'http://' + args.ecoghost
+
+        if not args.authfile.startswith('/'):
+            args.authfile = os.path.join(CWD, args.authfile)
+
+        if args.version:
+            output(__version__)
+            sys.exit(0)
+
+        return args
+
+    @staticmethod
     def read_auth(authfile):
         access_token = None
         if os.path.exists(authfile):
@@ -346,15 +401,13 @@ class EcogClient(object):
             logger.debug('access token: %s', access_token.key)
         return access_token
 
-    def _parse_args(self, args=None):
-        pass
-
+    @command
     def get(self, title, revision=None, format=None, **options): 
         @exit_on_exception
         @terminate_on_KeyboardInterrupt
         @exit_on_HTTPError
         @try_auth_on_forbidden(self.ecog, self.authfile)
-        def command(title, revision, format):
+        def _command(title, revision, format):
             if format == 'markdown': format = 'txt'
 
             #
@@ -373,23 +426,25 @@ class EcogClient(object):
 
             output(content)
 
-        command(title=title, revision=revision, format=format)
+        _command(title=title, revision=revision, format=format)
 
+    @command
     def cat(self, title, revision=None, **options): 
         @exit_on_exception
         @terminate_on_KeyboardInterrupt
         @exit_on_HTTPError
         @try_auth_on_forbidden(self.ecog, self.authfile)
-        def command(title, revision):
+        def _command(title, revision):
             _resp,content = self.ecog.cat(title=title, revision=revision)
             output(content)
 
-        command(title=title, revision=revision)
+        _command(title=title, revision=revision)
 
+    @command
     def list(self, **options): 
         @exit_on_exception
         @terminate_on_KeyboardInterrupt
-        def command():
+        def _command():
             entries = self.ecog.list().entries
             max_author_width = max(len(e.author) for e in entries)
             for entry in entries:
@@ -398,20 +453,22 @@ class EcogClient(object):
                     format_updated_datetime(entry),
                     entry.title
                 ))
-        command()
+        _command()
 
+    @command
     def title(self, **options): 
         @exit_on_exception
         @terminate_on_KeyboardInterrupt
-        def command():
+        def _command():
             for title in self.ecog.all():
                 output(title)
-        command()
+        _command()
 
+    @command
     def recent(self, **options): 
         @exit_on_exception
         @terminate_on_KeyboardInterrupt
-        def command():
+        def _command():
             entries = self.ecog.recent().entries
 
             def summary_size(entry):
@@ -435,24 +492,25 @@ class EcogClient(object):
                 ))
             output()
         
-        command()
+        _command()
 
+    @command
     def edit(self, title, template, comment, **options): 
-        ecog_get  = try_auth_on_forbidden(self.ecog, self.authfile)(self.ecog.get)
-        ecog_post = try_auth_on_forbidden(self.ecog, self.authfile)(self.ecog.post)
+        ecog_get = try_auth_on_forbidden(self.ecog, self.authfile)(self.ecog.get)
+        ecog_put = try_auth_on_forbidden(self.ecog, self.authfile)(self.ecog.put)
 
         @exit_on_exception
         @terminate_on_KeyboardInterrupt
         @exit_on_HTTPError
-        def command(title, r0_template, comment=''):
-            ''' open editor and send post after save 
+        def _command(title, r0_template, comment=''):
+            ''' open editor and send put after save 
 
             1. [GET] get page metadata and save temp file
             2. [GET] get page rawdata with revision and save temp file
             3. open tempfile with rawbody, and let user edit
             4. after edit is finished, confirm tempfile
             5. ask for comment
-            6. [POST] post page with new content
+            6. [PUT] put page with new content
             7. remove temp files
             '''
             logger.info('[edit] %s', title)
@@ -519,10 +577,10 @@ class EcogClient(object):
                             diff = difflib.unified_diff(rawbody.splitlines(True),content.splitlines(True), **options)
                             for line in diff:
                                 output(line, end='')
-                            comment = raw_input('comment message (default: written by ecogwiki client): ')
-                            comment = comment or 'post by ecogwiki client'
-                        # 6. [POST] post page with new content
-                        resp,result = ecog_post(title, content, revision=revision, comment=comment)
+                            comment = raw_input('comment message (default: %s): ' % self.ecog.DEFAULT_COMMENT)
+                            comment = comment or self.ecog.DEFAULT_COMMENT
+                        # 6. [PUT] put page with new content
+                        resp,result = ecog_put(title, content, revision=revision, comment=comment)
                         logger.debug('[edit] %s', resp)
                         logger.debug('[edit] %s', result)
                         # TODO: add content-location
@@ -561,107 +619,109 @@ class EcogClient(object):
                 except OSError as e:
                     logger.error('[edit] failed removing temp directory %s, %s', tempdir, e)
 
-        command(title=title, r0_template=template, comment=comment)
+        _command(title=title, r0_template=template, comment=comment)
 
+    @command
     def memo(self, template='', comment='', **options): 
         now = datetime.datetime.now(dateutil.tz.tzlocal())
         title = 'memo/%s' % now.strftime("%Y-%m-%d")
         # TODO: add default .write ME to template
         self.edit(title=title, template=template, comment=comment)
 
+    @command
+    def append(self, title, body='', comment='', **options):
+        @exit_on_exception
+        @terminate_on_KeyboardInterrupt
+        @exit_on_HTTPError
+        @try_auth_on_forbidden(self.ecog, self.authfile)
+        def _command(title, body='', comment=''):
+            ''' if body is given, send post right away
 
-def parse_args():
-    parser = argparse.ArgumentParser(prog='ecog', description='Ecogwiki client - Information in your fingertips', epilog=' ')
-    parser.add_argument('--auth', metavar='FILE', dest='authfile', default='.auth',
-                       help='auth file storing access token')
-    parser.add_argument('--host', metavar='HOST', dest='ecoghost', default='www.ecogwiki.com',
-                       help='ecogwiki server host')
-    parser.add_argument('--version',  action='version', version='%(prog)s ' + __version__, default=None)
+            if not, open editor and send post after save 
+            '''
+            logger.info('[append] %s', title)
+            if body:
+                body = body.rstrip('\n') + '\n'
+                self.ecog.post(title=title, body=body, comment=comment)
+                return
 
-    subparsers = parser.add_subparsers(metavar='COMMAND', dest='command', title='ecogwiki commands')
-    cat_parser    = subparsers.add_parser('cat',    help='print page in markdown')
-    get_parser    = subparsers.add_parser('get',    help='print page in json')
-    list_parser   = subparsers.add_parser('list',   help="list pages info")
-    title_parser  = subparsers.add_parser('title',  help='list all titles')
-    recent_parser = subparsers.add_parser('recent', help='list recent modified pages')
-    edit_parser   = subparsers.add_parser('edit',   help='edit page with editor')
-    memo_parser   = subparsers.add_parser('memo',   help='quick memo')
-    
-    edit_parser.add_argument('title', metavar='TITLE', help='page title')
-    edit_parser.add_argument('--template', metavar='TEXT', help='text on new file', default=None)
-    edit_parser.add_argument('--comment',  metavar='TEXT', help='edit comment message', default='')
-    memo_parser.add_argument('--comment',  metavar='TEXT', help='edit comment message', default='')
-    get_parser.add_argument('title', metavar='TITLE', help='page title')
-    cat_parser.add_argument('title', metavar='TITLE', help='page title')
-    get_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
-    cat_parser.add_argument('--revision', metavar='REV', help='specific revision number', type=int)
-    get_parser.add_argument('--format', metavar='FORMAT', help='one of [json|html|markdown|atom], json by default',
-        choices=['json', 'txt', 'atom', 'markdown', 'html'], default='json')
+            tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
+            logger.debug('[append] temp directory: %s', tempdir)
+            try:
+                safe_title = urllib.quote_plus(title)
+                fd, temp_part = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'.part-', suffix='.markdown')
+                logger.debug('[append] "%s" partial file: %s', title, temp_part)
+                try:
+                    # 3. open temp file with editor
+                    ret = subprocess.call(editor.split() + [temp_part])
+                    if ret != 0:
+                        output('editor %s failed with status %d, aborting.' % (editor, ret))
+                        return
+                    # 4. confirm content
+                    content = ''
+                    with open(temp_part) as f:
+                        content = f.read()
+                    if len(content) == 0:
+                        output('empty content, aborting.')
+                        return
+                    # 5. ask comment
+                    if not comment:
+                        comment = raw_input('comment message (default: %s): ' % self.ecog.DEFAULT_COMMENT)
+                        comment = comment or self.ecog.DEFAULT_COMMENT
+                    # 6. [PUT] put page with new content
+                    resp,result = self.ecog.post(title, content, comment=comment)
+                    logger.debug('[append] %s', resp)
+                    logger.debug('[append] %s', result)
+                    # TODO: add content-location
+                    #output('updated "%s" to revision %d: %s' % (title, int(result['revision']), resp['content-location']))
+                    output('append to "%s"' % (title))
+
+                    # 7. remove temp file on success
+                    try:
+                        os.remove(temp_part)
+                        logger.debug('[append] removed %s', temp_part)
+                    except OSError as e:
+                        logger.error('[append] failed removing temp partial file %s, %s', temp_part, e)
+
+                    return result
+                except Exception as e:
+                    output('error during edit. temporary file is saved at: %s' % temp_part)
+                    logger.error('[append] %s', e)
+                    raise
+                finally:
+                    pass
+            finally:
+                try:
+                    os.removedirs(tempdir)
+                    logger.debug('[append] removed %s', tempdir)
+                except OSError as e:
+                    logger.error('[append] failed removing temp directory %s, %s', tempdir, e)
+
+        _command(title, body=body, comment=comment)
 
 
-    #
-    args = parser.parse_args()
-
-    if '://' not in args.ecoghost:
-        args.ecoghost = 'http://' + args.ecoghost
-
-    if not args.authfile.startswith('/'):
-        args.authfile = os.path.join(CWD, args.authfile)
-
-    if args.version:
-        output(__version__)
-        sys.exit(0)
-
-    return args
 
 def main():
-    args = parse_args()
+    args   = EcogClient.parse_args()
     kwargs = dict(args._get_kwargs())
 
-    # auth
-    access_token = None
-    if os.path.exists(args.authfile):
-        # read from auth file
-        logger.debug('found auth file at: %s', args.authfile)
-        token, secret = open(args.authfile).read().strip().split('\n')
-        access_token  = oauth.Token(token, secret)
-        logger.debug('access token: %s', access_token.key)
-    ecog = EcogWiki(args.ecoghost, access_token)
+    ## auth
+    #access_token = None
+    #if os.path.exists(args.authfile):
+    #    # read from auth file
+    #    logger.debug('found auth file at: %s', args.authfile)
+    #    token, secret = open(args.authfile).read().strip().split('\n')
+    #    access_token  = oauth.Token(token, secret)
+    #    logger.debug('access token: %s', access_token.key)
+    #ecog = EcogWiki(args.ecoghost, access_token)
 
     # EcoWiki
     client = EcogClient(args.ecoghost, args.authfile)
 
-    #
     # Commands
-    #
-
-    # list
-    if args.command == 'list':
-        client.list(**kwargs)
-
-    # recents
-    elif args.command == 'recent':
-        client.recent(**kwargs)
-
-    # title
-    elif args.command == 'title':
-        client.title(**kwargs)
-
-    # get
-    elif args.command == 'get':
-        client.get(**kwargs)
-
-    # cat
-    elif args.command == 'cat':
-        client.cat(**kwargs)
-
-    # edit
-    elif args.command == 'edit':
-        client.edit(**kwargs)
-
-    # memo
-    elif args.command == 'memo':
-        client.memo(**kwargs)
+    if args.command in COMMANDS:
+        command = getattr(client, args.command) # client.get
+        command(**kwargs)
 
 
 if __name__ == '__main__':

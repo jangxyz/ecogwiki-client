@@ -78,6 +78,8 @@ def to_url(url, params={}):
 #
 
 class EcogWiki(object):
+    DEFAULT_COMMENT =  'updated by ecogwiki client'
+
     def __init__(self, baseurl, access_token=None):
         self.baseurl = baseurl # http://ecogwiki-jangxyz.appspot.com
         self.set_access_token(access_token)
@@ -139,20 +141,17 @@ class EcogWiki(object):
             content = json.loads(content)
         return resp, content
 
-    def post(self, title, body, revision=None, comment='', format='json'):
-        logger.info('[post] %s size: %d revision:%s comment:%s', title, len(body), revision, comment)
-        if revision is None:
-            _resp,data = self.get(title)
-            revision = data['revision']
+
+    def post(self, title, body, comment=''):
+        logger.info('[post] %s size: %d comment:%s', title, len(body), comment)
         url = urllib.basejoin(self.baseurl, title)
         data = urllib.urlencode({
             'title': title,
             'body': body,
-            'revision': revision,
-            'comment': comment or 'post by ecogwiki client',
+            'comment': comment or self.DEFAULT_COMMENT
         })
         try:
-            resp, content = self._request(url, format=format, method='PUT', body=data)
+            resp, content = self._request(url, format='json', method='POST', body=data)
             # TODO: handle 406, 409
             try:
                 content = json.loads(content)
@@ -161,6 +160,30 @@ class EcogWiki(object):
             return resp, content
         except HTTPError as e:
             logger.error("[post] %d %s", e.code, e.msg)
+            raise
+
+    def put(self, title, body, revision=None, comment='', format='json'):
+        logger.info('[put] %s size: %d revision:%s comment:%s', title, len(body), revision, comment)
+        if revision is None:
+            _resp,data = self.get(title)
+            revision = data['revision']
+        url = urllib.basejoin(self.baseurl, title)
+        data = urllib.urlencode({
+            'title': title,
+            'body': body,
+            'revision': revision,
+            'comment': comment or self.DEFAULT_COMMENT
+        })
+        try:
+            resp, content = self._request(url, format=format, method='PUT', body=data)
+            # TODO: handle 406, 409
+            try:
+                content = json.loads(content)
+            except Exception as e:
+                logger.error('[put] json load error: %s', e)
+            return resp, content
+        except HTTPError as e:
+            logger.error("[put] %d %s", e.code, e.msg)
             raise
 
     def list(self):

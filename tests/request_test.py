@@ -87,11 +87,11 @@ class DefaultRequestBehavior(EcogTestCase):
     def test_raise_HTTPError_when_status_is_not_200(self):
         #
         self.response['status'] = '500'
-        self.assertRaises(ecog.HTTPError, 
+        self.assertRaises(ecog.ecogwiki.HTTPError, 
             self.ecog._request, 'http://ecogwiki-jangxyz.appspot.com/Home')
         # even on other 200's
         self.response['status'] = '201'
-        self.assertRaises(ecog.HTTPError, 
+        self.assertRaises(ecog.ecogwiki.HTTPError, 
             self.ecog._request, 'http://ecogwiki-jangxyz.appspot.com/Home')
 
 
@@ -137,9 +137,9 @@ class Ecog_get(EcogTestCase):
         self.assertEqual(content, {'body': 'a new content'})
 
 
-class Ecog_post(EcogTestCase):
+class Ecog_put(EcogTestCase):
     def setUp(self):
-        super(Ecog_post, self).setUp()
+        super(Ecog_put, self).setUp()
         # mock _request
         self.ecog._request = mock.Mock()
         self.response = oauth.httplib2.Response({
@@ -149,10 +149,10 @@ class Ecog_post(EcogTestCase):
         self.ecog._request.return_value = (self.response, '{}')
 
     def tearDown(self):
-        super(Ecog_post, self).tearDown()
+        super(Ecog_put, self).tearDown()
 
     def test_default_behvaior(self):
-        self.ecog.post(title='Home', body='a new Home', revision=10, comment='testing comment')
+        self.ecog.put(title='Home', body='a new Home', revision=10, comment='testing comment')
         # assert
         self.ecog._request.assert_called_with(
             'http://ecogwiki-jangxyz.appspot.com/Home',
@@ -175,7 +175,7 @@ class Ecog_post(EcogTestCase):
             'revision': 11,
         }))
         # run
-        self.ecog.post(title='Home', body='a new Home')
+        self.ecog.put(title='Home', body='a new Home')
         # assert
         self.ecog.get.assert_called_once_with(mock.ANY)
         # assert using revision
@@ -183,10 +183,41 @@ class Ecog_post(EcogTestCase):
         self.assertIn('revision=11', kwargs['body'])
 
     def test_default_comment(self):
-        self.ecog.post(title='Home', body='a new Home', revision=10)
+        self.ecog.put(title='Home', body='a new Home', revision=10)
         # assert body
         args, kwargs = self.ecog._request.call_args
-        self.assertIn('post+by+ecogwiki+client', kwargs['body'])
+        self.assertIn('updated+by+ecogwiki+client', kwargs['body'])
+
+
+class Ecog_post(EcogTestCase):
+    def setUp(self):
+        super(Ecog_post, self).setUp()
+        # mock _request
+        self.ecog._request = mock.Mock()
+        self.response = oauth.httplib2.Response({
+            'status': '200',
+            'content-type': 'application/json; charset=utf-8'
+        })
+        self.ecog._request.return_value = (self.response, '{}')
+
+    def tearDown(self):
+        super(Ecog_post, self).tearDown()
+
+    def test_default_behvaior(self):
+        self.ecog.post(title='Home', body='a new Home', comment='testing comment')
+        # assert
+        self.ecog._request.assert_called_with(
+            'http://ecogwiki-jangxyz.appspot.com/Home',
+            method='POST',
+            format='json',
+            body=mock.ANY,
+        )
+        # assert body
+        args, kwargs = self.ecog._request.call_args
+        bodystring = kwargs['body']
+        self.assertIn('title=Home', bodystring)
+        self.assertIn('body=a+new+Home', bodystring)
+        self.assertIn('comment=testing+comment', bodystring)
 
 
 class Ecog_cat(EcogTestCase):
