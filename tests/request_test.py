@@ -7,7 +7,9 @@ import ecog
 '''
 
 import urllib2
+
 import mock
+import oauth2 as oauth
 
 
 BASE_URL = 'http://ecogwiki-jangxyz.appspot.com/'
@@ -22,15 +24,14 @@ def full_url_with_path(path):
     return urllib2.urlparse.urljoin(BASE_URL, path)
 
 
-
 class EcogTestCase(unittest.TestCase):
     def setUp(self):
-        access_token = ecog.oauth.Token('token', 'secent')
+        access_token = oauth.Token('token', 'secent')
         self.ecog = ecog.EcogWiki(BASE_URL, access_token=access_token)
 
         # mock client
         self.ecog.client = mock.Mock()
-        self.response = ecog.oauth.httplib2.Response({
+        self.response = oauth.httplib2.Response({
             'status': '200',
             'content-type': 'application/json; charset=utf-8'
         })
@@ -96,7 +97,7 @@ class Ecog_get(EcogTestCase):
         super(Ecog_get, self).setUp()
         # mock _request
         self.ecog._request = mock.Mock()
-        self.response = ecog.oauth.httplib2.Response({
+        self.response = oauth.httplib2.Response({
             'status': '200',
             'content-type': 'application/json; charset=utf-8'
         })
@@ -138,7 +139,7 @@ class Ecog_post(EcogTestCase):
         super(Ecog_post, self).setUp()
         # mock _request
         self.ecog._request = mock.Mock()
-        self.response = ecog.oauth.httplib2.Response({
+        self.response = oauth.httplib2.Response({
             'status': '200',
             'content-type': 'application/json; charset=utf-8'
         })
@@ -183,6 +184,27 @@ class Ecog_post(EcogTestCase):
         # assert body
         args, kwargs = self.ecog._request.call_args
         self.assertIn('post+by+ecogwiki+client', kwargs['body'])
+
+
+class Ecog_cat(EcogTestCase):
+    def setUp(self):
+        super(Ecog_cat, self).setUp()
+        # mock _request
+        self.ecog.get = mock.Mock()
+        self.response = oauth.httplib2.Response({
+            'status': '200',
+            'content-type': 'application/json; charset=utf-8'
+        })
+        #self.ecog._request.return_value = (self.response, '{}')
+
+    def tearDown(self):
+        super(Ecog_cat, self).tearDown()
+
+    def test_calls_get_with_format_txt(self):
+        self.ecog.cat(title='Home')
+        # assert
+        args, kwargs = self.ecog.get.call_args
+        self.assertEqual(kwargs['format'], 'txt')
 
 
 class PUT_Request(unittest.TestCase):

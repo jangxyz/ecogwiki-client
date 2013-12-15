@@ -1,5 +1,0 @@
-#!/usr/bin/python
-
-from ecog import client
-client.main()
-
