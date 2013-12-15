@@ -170,6 +170,8 @@ Note unchanged content is not saved.
 	$ ecog edit -h
 	usage: ecog edit [-h] [--template TEXT] [--comment TEXT] TITLE
 
+	Edit page with your favorite editor ($EDITOR)
+
 	positional arguments:
 	  TITLE            page title
 
@@ -178,7 +180,29 @@ Note unchanged content is not saved.
 	  --template TEXT  text on new file
 	  --comment TEXT   edit comment message
 
+
 You may give a default text to begin with if you are creating a new page with `--template` option.
+
+
+## append
+
+You can quickly add to a specific page -- no need to do all the readings beforehand.
+
+	$ ecog append -h
+	usage: ecog append [-h] [--comment MSG] TITLE [TEXT]
+
+	Quickly append to page
+
+	positional arguments:
+	  TITLE          page title
+	  TEXT           body text. fires editor if not given
+
+	optional arguments:
+	  -h, --help     show this help message and exit
+	  --comment MSG  comment message
+
+
+The body text is optional. If not given, once again the editor will fire open.
 
 
 ## memo
@@ -189,6 +213,8 @@ Everytime you fire `ecog memo`, it will open a page titled `memo/YYYY-mm-dd` wit
 
 	$ ecog memo -h
 	usage: ecog memo [-h] [--comment TEXT]
+
+	Edit your daily memo
 
 	optional arguments:
 	  -h, --help      show this help message and exit

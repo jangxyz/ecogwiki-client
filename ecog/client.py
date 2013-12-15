@@ -14,13 +14,14 @@
 
     ecogwiki commands:
       COMMAND
-        cat        print page in markdown
-        get        print page in json
-        list       list pages info
-        title      list all titles
-        recent     list recent modified pages
-        edit       edit page with editor
-        memo       quick memo
+            cat        print page in markdown
+            get        print page in json
+            list       list pages info
+            title      list all titles
+            recent     list recent modified pages
+            edit       edit page with editor
+            append     only append text
+            memo       quick memo
 
 '''
 
@@ -40,6 +41,7 @@ import logging
 import traceback
 import difflib
 import shutil
+from contextlib import contextmanager
 
 import oauth2 as oauth
 import dateutil.parser
@@ -75,7 +77,7 @@ error_handler = logging.FileHandler(os.path.join(LOG_DIR, 'error.log'))
 error_handler.setLevel(logging.ERROR)
 
 logger.addHandler(info_handler)
-logger.addHandler(debug_handler)
+#logger.addHandler(debug_handler)
 logger.addHandler(error_handler)
 
 
@@ -494,6 +496,56 @@ class EcogClient(object):
         
         _command()
 
+
+    @contextmanager
+    def working_with_tempdir(self, prefix=None, **options):
+        local_logger, logger_heading = logger, ''
+        logger_option = options.get('logger', True)
+        if   logger_option is False:    local_logger = None
+        elif logger_option is True:     local_logger = logger
+        elif isinstance(logger_option, basestring):
+            logger_heading = '[' + logger_option + '] '
+
+        # create temp directory
+        temp_dir = tempfile.mkdtemp(prefix=prefix)
+        logger.debug('[edit] temp directory: %s', temp_dir)
+        local_logger and local_logger.debug('%stemp directory: %s', logger_heading, temp_dir)
+
+        try:
+            yield temp_dir
+        finally:
+            try:
+                os.removedirs(temp_dir)
+                local_logger and local_logger.debug('%sremoved %s', logger_heading, temp_dir)
+            except OSError as e:
+                local_logger and local_logger.debug('%sfailed removing temp directory %s, %s', logger_heading, temp_dir, e)
+        
+
+    @contextmanager
+    def working_with_tempfile(self, dir=None, prefix=None, suffix=None, **options):
+        local_logger, logger_heading = logger, ''
+        logger_option = options.get('logger', True)
+        if   logger_option is False:    local_logger = None
+        elif logger_option is True:     local_logger = logger
+        elif isinstance(logger_option, basestring):
+            logger_heading = '[' + logger_option + '] '
+
+        remove_on_final = options.get('remove_on_final', True)
+
+        # create temp file
+        fd, temp_file = tempfile.mkstemp(dir=dir, prefix=prefix, suffix=suffix)
+        local_logger and local_logger.debug('%smeta file: %s', logger_heading, temp_file)
+
+        try:
+            yield temp_file
+        finally:
+            if remove_on_final:
+                try:
+                    os.remove(temp_file)
+                    logger.debug('%sremoved %s', logger_heading, temp_file)
+                except OSError as e:
+                    logger.error('%sfailed removing temp json file %s (%s)', logger_heading, temp_file, e)
+
     @command
     def edit(self, title, template, comment, **options): 
         ecog_get = try_auth_on_forbidden(self.ecog, self.authfile)(self.ecog.get)
@@ -517,21 +569,21 @@ class EcogClient(object):
             if r0_template and not r0_template.endswith("\n"):
                 r0_template += "\n\n"
 
-            tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
-            logger.debug('[edit] temp directory: %s', tempdir)
-            try:
+            #tempdir = tempfile.mkdtemp(prefix='ecogwiki-')
+            #logger.debug('[edit] temp directory: %s', tempdir)
+            #try:
+            with self.working_with_tempdir(prefix='ecogwiki-', logger='edit') as tempdir:
+
                 # 1. [GET] get page metadata
                 _resp,jsondata = ecog_get(title, format='json')
                 revision       = jsondata['revision']
-
-                updated_at = None
-                if jsondata['updated_at']:
-                    updated_at = updated_datetime(jsondata['updated_at'])
+                updated_at     = updated_datetime(jsondata['updated_at']) if jsondata['updated_at'] else None
 
                 safe_title = urllib.quote_plus(title)
-                fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
-                logger.debug('[edit] "%s" meta file: %s', title, temp_json)
-                try:
+                #fd, temp_json = tempfile.mkstemp(dir=tempdir, prefix=safe_title+'-', suffix='.json')
+                #logger.debug('[edit] "%s" meta file: %s', title, temp_json)
+                #try:
+                with self.working_with_tempfile(dir=tempdir, prefix=safe_title+'-', suffix='.json', logger='edit') as temp_json:
                     with open(temp_json, 'w') as f:
                         json.dump(jsondata, f, indent=4)
                     # 2. [GET] get page rawdata
@@ -543,7 +595,7 @@ class EcogClient(object):
                             f.write(rawbody)
                         elif r0_template:
                             f.write(r0_template)
-                    # copy
+                    # copy tempfile
                     temp_rawbody = os.path.splitext(temp_rawbody0)
                     temp_rawbody = temp_rawbody[0] + '.edit' + temp_rawbody[1]
                     shutil.copy(temp_rawbody0, temp_rawbody)
@@ -566,16 +618,20 @@ class EcogClient(object):
                             return
                         # 5. ask comment
                         if not comment:
-                            options = {
-                                'n': 0,
-                                'fromfile': '%s (rev %d)' % (title, revision),
-                                'tofile': 'EDIT', 
-                            }
-                            if updated_at:
-                                options['fromfiledate'] = updated_at.strftime("%Y/%m/%d %H-%M")
+                            def diff_lines(a_str,b_str,fromfile,tofile,fromfiledate=None,tofiledate=None):
+                                options = { 'n': 0 }
+                                if fromfile:     options['fromfile']     = fromfile
+                                if tofile:       options['tofile']       = tofile
+                                if fromfiledate: options['fromfiledate'] = fromfiledate
+                                if tofiledate:   options['tofiledate']   = tofiledate
 
-                            diff = difflib.unified_diff(rawbody.splitlines(True),content.splitlines(True), **options)
-                            for line in diff:
+                                diff = difflib.unified_diff(a_str.splitlines(True),b_str.splitlines(True), **options)
+                                return diff
+
+                            # display diff lines
+                            fromfile,fromfiledate = '%s (rev %d)' % (title, revision), updated_at.strftime("%Y/%m/%d %H-%M")
+                            for line in diff_lines(rawbody,content, fromfile=fromfile, tofile='EDIT', 
+                                    fromfiledate=updated_at.strftime("%Y/%m/%d %H-%M")):
                                 output(line, end='')
                             comment = raw_input('comment message (default: %s): ' % self.ecog.DEFAULT_COMMENT)
                             comment = comment or self.ecog.DEFAULT_COMMENT
@@ -606,18 +662,18 @@ class EcogClient(object):
                         raise
                     finally:
                         pass
-                finally:
-                    try:
-                        os.remove(temp_json)
-                        logger.debug('[edit] removed %s', temp_json)
-                    except OSError as e:
-                        logger.error('[edit] failed removing temp json file %s (%s)', temp_json, e)
-            finally:
-                try:
-                    os.removedirs(tempdir)
-                    logger.debug('[edit] removed %s', tempdir)
-                except OSError as e:
-                    logger.error('[edit] failed removing temp directory %s, %s', tempdir, e)
+                #finally:
+                #    try:
+                #        os.remove(temp_json)
+                #        logger.debug('[edit] removed %s', temp_json)
+                #    except OSError as e:
+                #        logger.error('[edit] failed removing temp json file %s (%s)', temp_json, e)
+            #finally:
+            #    try:
+            #        os.removedirs(tempdir)
+            #        logger.debug('[edit] removed %s', tempdir)
+            #    except OSError as e:
+            #        logger.error('[edit] failed removing temp directory %s, %s', tempdir, e)
 
         _command(title=title, r0_template=template, comment=comment)
 

@@ -31,7 +31,6 @@ setup(name='ecog',
     long_description = __doc__,
     url = 'https://github.com/jangxyz/ecogwiki-client',
 
-    #package_dir = {'ecog': 'src'},
     packages = ['ecog'],
     scripts = ['scripts/ecog'],
     install_requires = ['oauth2', 'feedparser', 'python-dateutil'],
